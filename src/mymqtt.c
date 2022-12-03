@@ -6,13 +6,13 @@
 #include "esp_wifi.h"
 #include "esp_system.h"
 #include "nvs_flash.h"
-#include "esp_event.h"
 #include "esp_netif.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "freertos/stream_buffer.h"
+#include "freertos/event_groups.h"
 
 #include "lwip/sockets.h"
 #include "lwip/dns.h"
@@ -21,10 +21,11 @@
 #include "esp_log.h"
 #include "mqtt_client.h"
 
-#include "tic_decode.h"
+#include "inter_task.h"
+#include "oled.h"
 #include "mqtt.h"
 
-static const char *TAG = "MyMqtt";
+static const char *TAG = "mqtt_task";
 
 #define TIC_BROKER_URL CONFIG_TIC_BROKER_URL
 
@@ -33,9 +34,14 @@ const char *published_labels[] = { "ADCO", "IINST", "PTEC", "BASE", "HCHC", "HCH
 
 typedef struct mqtt_task_param_s {
     QueueHandle_t from_decoder;
+    QueueHandle_t to_oled;
     esp_mqtt_client_handle_t esp_client;
 } mqtt_task_param_t;
 
+
+typedef struct mqtt_handler_ctx_s {
+    QueueHandle_t to_oled;
+} mqtt_handler_ctx_t;
 
 
 static void log_error_if_nonzero(const char *message, int error_code)
@@ -60,14 +66,26 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 {
     ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%d", base, event_id);
     esp_mqtt_event_handle_t event = event_data;
-    //esp_mqtt_client_handle_t client = event->client;
-    //int msg_id;
+    
+    mqtt_handler_ctx_t *ctx = (mqtt_handler_ctx_t *)handler_args;
+
+    display_event_t oled_evt = {
+        .info = DISPLAY_MQTT_STATUS
+    };
+
     switch ((esp_mqtt_event_id_t)event_id) {
+
+    case MQTT_EVENT_BEFORE_CONNECT:
+        ESP_LOGI(TAG, "MQTT_EVENT_BEFORE CONNECT");
+        strncpy( oled_evt.txt, "connecting...", sizeof( oled_evt.txt ) );
+        break;
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
+        strncpy( oled_evt.txt, "connected", sizeof( oled_evt.txt ) );
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
+        strncpy( oled_evt.txt, "not connected", sizeof( oled_evt.txt ) );
         break;
     case MQTT_EVENT_SUBSCRIBED:
         ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
@@ -91,11 +109,20 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             log_error_if_nonzero("captured as transport's socket errno",  event->error_handle->esp_transport_sock_errno);
             ESP_LOGI(TAG, "Last errno string (%s)", strerror(event->error_handle->esp_transport_sock_errno));
         }
+        strncpy( oled_evt.txt, "error", sizeof( oled_evt.txt ) );
         break;
     default:
         ESP_LOGI(TAG, "Other event id:%d", event->event_id);
-        vTaskDelay( 500/portTICK_PERIOD_MS );
         break;
+    }
+
+    if( oled_evt.txt[0] != '\0' )
+    {
+        //ESP_LOGD( TAG, "Updating oled :  %#x '%s' to_oled=%p)", oled_evt.info, oled_evt.txt, ctx->to_oled );
+        if( xQueueSend( ctx->to_oled, &oled_evt, 0) != pdTRUE )
+        {
+            ESP_LOGE( TAG, "failed to update oled");
+        }
     }
 }
 
@@ -186,31 +213,26 @@ mqtt_error_t datasets_to_json( char *str, size_t size, tic_dataset_t *ds )
 
 void mqtt_task( void *pvParams )
 {
-
     ESP_LOGI( TAG, "mqtt_task()");
 
     mqtt_task_param_t *params = (mqtt_task_param_t *)pvParams;
-    QueueHandle_t queue = params->from_decoder;
-    esp_mqtt_client_handle_t client = params->esp_client;
 
     char *json_buffer = malloc(MQTT_JSON_BUFFER_SIZE);
 
     TickType_t max_ticks = MQTT_TIC_TIMEOUT_SEC * 1000 / portTICK_PERIOD_MS; 
     tic_dataset_t *datasets = NULL; 
 
-    esp_log_level_set( TAG, ESP_LOG_DEBUG );
-
     for(;;)
     {
-        BaseType_t ds_received = xQueueReceive( queue, &datasets, max_ticks );
+        BaseType_t ds_received = xQueueReceive( params->from_decoder, &datasets, max_ticks );
         if( ds_received == pdTRUE )
         {
-            ESP_LOGD( TAG, "Received dataset %p in mqtt_task()", datasets );
+            // ESP_LOGD( TAG, "Received dataset %p in mqtt_task()", datasets );
             datasets_to_json( json_buffer, MQTT_JSON_BUFFER_SIZE, datasets );
             tic_dataset_free( datasets );    /// malloc() dans tic_decode
 
             //ESP_LOGI( TAG, "Publishing %d bytes in mqtt_task()", strlen(json_buffer) );
-            esp_mqtt_client_publish( client, "/linky/pouet", json_buffer, 0, 0, 0);
+            esp_mqtt_client_publish( params->esp_client, "/linky/pouet", json_buffer, 0, 0, 0);
             //ESP_LOGI( TAG, "Publish done !");
         }
         else
@@ -223,8 +245,10 @@ void mqtt_task( void *pvParams )
 }
 
 
-BaseType_t mqtt_task_start( QueueHandle_t from_decoder )
+BaseType_t mqtt_task_start( QueueHandle_t from_decoder, QueueHandle_t to_oled )
 {
+   esp_log_level_set( TAG, ESP_LOG_DEBUG );
+
    esp_mqtt_client_config_t mqtt_cfg = {
         .uri = TIC_BROKER_URL
     };
@@ -236,9 +260,17 @@ BaseType_t mqtt_task_start( QueueHandle_t from_decoder )
         return pdFALSE;
     }
 
+    mqtt_handler_ctx_t *ctx = malloc( sizeof(mqtt_handler_ctx_t) );
+    if( ctx == NULL)
+    {
+        ESP_LOGE( TAG, "malloc( mqtt_handler_ctx ) failed");
+        return pdFALSE;
+    }
+    ctx->to_oled = to_oled;
+
     esp_err_t err;
     /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
-    err = esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
+    err = esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, ctx );
     if( err != ESP_OK ) {
         ESP_LOGE( TAG, "esp_mqtt_client_register_event() erreur %d", err);
         return pdFALSE;
@@ -253,6 +285,7 @@ BaseType_t mqtt_task_start( QueueHandle_t from_decoder )
     // setup inter-task communication stuff
     mqtt_task_param_t *task_params = malloc( sizeof( mqtt_task_param_t ) );
     task_params->from_decoder = from_decoder;
+    task_params->to_oled = to_oled;
     task_params->esp_client = client;
 
     // create mqtt client

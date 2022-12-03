@@ -2,13 +2,16 @@
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/event_groups.h"
 #include "freertos/stream_buffer.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #include "esp_log.h"
 #include "mqtt_client.h"
 
+#include "inter_task.h"
 #include "tic_decode.h"
+#include "oled.h"
 
 static const char *TAG = "tic_decode";
 
@@ -29,6 +32,8 @@ static const char *TAG = "tic_decode";
 typedef struct tic_taskdecode_params_s {
     StreamBufferHandle_t from_uart;
     QueueHandle_t to_mqtt;
+    EventGroupHandle_t to_blink;
+    QueueHandle_t to_oled;
 } tic_taskdecode_params_t;
 
 /***
@@ -50,8 +55,15 @@ typedef struct tic_decoder_s {
     tic_char_t *cur_buf;
     size_t cur_buf_size;
 
-    // queue freertos pour pour envoyer les trames completes au client mqtt
-    QueueHandle_t mqtt_queue;
+    // queue pour envoyer les trames completes au client mqtt
+    QueueHandle_t to_mqtt;
+
+    // event_groups pour faire clignoter la Led
+    EventGroupHandle_t to_blink;
+
+    // queue pour envoyer les trames completes au client mqtt
+    QueueHandle_t to_oled;
+
 
 } tic_decoder_t;
 
@@ -115,7 +127,9 @@ static void reset_decoder( tic_decoder_t *td )
     //ESP_LOGD( TAG, "reset_decoder()");
 
     // membres conservés
-    QueueHandle_t mqtt_queue = td->mqtt_queue;
+    QueueHandle_t to_mqtt = td->to_mqtt;
+    EventGroupHandle_t to_blink = td->to_blink;
+    QueueHandle_t to_oled = td->to_oled;
 
     // desalloue les datasets
     tic_dataset_free( td->datasets );
@@ -124,7 +138,9 @@ static void reset_decoder( tic_decoder_t *td )
     memset( td, 0, sizeof(tic_decoder_t) );
 
     // restaure les membres conservés
-    td->mqtt_queue = mqtt_queue;
+    td->to_mqtt = to_mqtt;
+    td->to_blink = to_blink;
+    td->to_oled = to_oled;
 }
 
 
@@ -160,6 +176,17 @@ static void addbuf( uint32_t *s1, const tic_char_t *buf )
         *s1 += *p;
         p++;
     }
+}
+
+
+static tic_error_t affiche_dataset( tic_decoder_t *td, const tic_dataset_t *ds )
+{
+    if( strcmp( ds->etiquette, "PAPP" ) == 0 )
+    {
+
+       oled_update( td->to_oled, DISPLAY_PAPP, ds->valeur );
+    }
+    return TIC_OK;
 }
 
 
@@ -225,6 +252,9 @@ static tic_error_t dataset_end( tic_decoder_t *td ) {
     ds->next = td->datasets;
     td->datasets = ds;
 
+    // mise à jour afficheur oled
+    affiche_dataset( td, ds );
+
     return TIC_OK;
 }
 
@@ -238,7 +268,8 @@ static tic_error_t frame_start( tic_decoder_t *td )
         return TIC_ERR_INVALID_CHAR;
     }
     td->stx_received = 1;
-    ESP_LOGI( TAG, "Free memory: %d bytes", esp_get_free_heap_size());
+    // todo -> creer un tache de surveillance de la memoire, ou tester les outils d'analyse ESP
+    //ESP_LOGD( TAG, "Free memory: %d bytes", esp_get_free_heap_size());
     return TIC_OK;
 }
 
@@ -247,22 +278,21 @@ static tic_error_t frame_end( tic_decoder_t *td )
 {
     
     // monitoring sur la console serie
-    tic_dataset_print( td->datasets );
+    // tic_dataset_print( td->datasets );
 
     // blink led
-    // TODO
+    xEventGroupSetBits( td->to_blink, TIC_BIT_LONG );
     
     
-    // uint32_t nb = tic_dataset_count( td->datasets );
-    // uint32_t size = tic_dataset_size( td->datasets );
+    //uint32_t nb = tic_dataset_count( td->datasets );
+    //uint32_t size = tic_dataset_size( td->datasets );
     //ESP_LOGI( TAG, "Trame de %d datasets %d bytes (%p)", nb, size, td->datasets );
 
     tic_error_t ret = TIC_OK;
-    BaseType_t send_ok = xQueueSend( td->mqtt_queue, &(td->datasets), 10 );
+    BaseType_t send_ok = xQueueSend( td->to_mqtt, &(td->datasets), 10 );
     if( send_ok == pdTRUE )
     {
-        // les datasets passent dans la queue et changent de propriétaire 
-        // ils devront être désalloués par le recepteur (mqtt_client)
+        // les datasets devront être free() par le recepteur mqtt_client
         td->datasets = NULL;
     }
     else
@@ -362,10 +392,9 @@ static tic_error_t process_char( tic_decoder_t *td, const tic_char_t ch )  {
             ret = dataset_end( td );
             break;
         default:
-            // label, timestamp, value ou separateur
+            // autres caractères : label, timestamp, value ou separateur
             ret = process_data( td, ch );
     }
-
     return ret;
 }
 
@@ -390,16 +419,25 @@ void tic_decode_task( void *pvParams )
 
     // donnees internes du decodeur
     tic_decoder_t td = {
-        .mqtt_queue = params->to_mqtt
+        .to_mqtt = params->to_mqtt,
+        .to_blink = params->to_blink,
+        .to_oled = params->to_oled
     };
 
     // buffer pour recevoir les données de la tache uart_events
     tic_char_t *rx_buf = malloc( RX_BUF_SIZE );
+    if( rx_buf == NULL )
+    {
+        ESP_LOGD( TAG, "malloc() failed" );
+        return;
+    }
 
     tic_error_t err;
-
     for(;;) {
         size_t n = xStreamBufferReceive( params->from_uart, rx_buf, RX_BUF_SIZE, portMAX_DELAY );
+
+        // blink led at each UART receive event
+        xEventGroupSetBits( td.to_blink, TIC_BIT_COURT );
 
         err = process_raw_data( &td, rx_buf, n );
         if( err != TIC_OK )
@@ -414,10 +452,18 @@ void tic_decode_task( void *pvParams )
  /***
   * Create a task to decode teleinfo raw bytestream received from uart
   */
-void tic_decode_start_task( StreamBufferHandle_t from_uart, QueueHandle_t mqtt_queue )
+void tic_decode_start_task( StreamBufferHandle_t from_uart, QueueHandle_t mqtt_queue, EventGroupHandle_t blink_events, QueueHandle_t to_oled )
 {
     tic_taskdecode_params_t *tic_task_params = malloc( sizeof(tic_taskdecode_params_t) );
+    if( tic_task_params == NULL )
+    {
+        ESP_LOGE( TAG, "malloc() failed" );
+        return;
+    }
+
     tic_task_params->from_uart = from_uart;
     tic_task_params->to_mqtt = mqtt_queue;
-    xTaskCreate(tic_decode_task, "tic_decode_task", 8192, (void *)tic_task_params, 12, NULL);
+    tic_task_params->to_blink = blink_events;
+    tic_task_params->to_oled = to_oled;
+    xTaskCreate(tic_decode_task, "tic_decode_task", 4096, (void *)tic_task_params, 12, NULL);
 }

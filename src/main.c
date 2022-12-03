@@ -5,44 +5,37 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include "freertos/event_groups.h"
 #include "freertos/stream_buffer.h"
-#include "driver/uart.h"
-#include "driver/gpio.h"
 #include "mqtt_client.h"
-
+#include "nvs_flash.h"
 #include "esp_log.h"
 
 
+#include "inter_task.h"
 #include "tic_decode.h"
 #include "uart_events.h"
 #include "wifi.h"
 #include "mqtt.h"
-
+#include "oled.h"
+#include "led.h"
 
 static const char *TAG = "main_app";
-
 
 #define UART_STREAMBUFFER_SIZE 512
 #define UART_STREAMBUFFER_TRIGGER 16
 
 
 
-
-void blink_led_task( void *pvParams)
+void nvs_initialise(void)
 {
-    gpio_set_direction( GPIO_NUM_4,GPIO_MODE_OUTPUT );
-    for(;;)
-    {
-        gpio_set_level( GPIO_NUM_4, 1 );
-        vTaskDelay( 300 / portTICK_PERIOD_MS );
-        gpio_set_level( GPIO_NUM_4, 0 );
-        vTaskDelay( 700 / portTICK_PERIOD_MS );
+    //Initialize NVS
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+      ESP_ERROR_CHECK(nvs_flash_erase());
+      ret = nvs_flash_init();
     }
-}
-
-void blink_led_start_task(void)
-{
-    xTaskCreate(blink_led_task, "blink_led", 2048, NULL, 12, NULL);
+    ESP_ERROR_CHECK(ret);
 }
 
 
@@ -55,35 +48,45 @@ void app_main(void)
     ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
 
     // transfere le flux de données brutes depuis l'UART vers le decodeur
-    StreamBufferHandle_t uart_to_decoder = xStreamBufferCreate( UART_STREAMBUFFER_SIZE, UART_STREAMBUFFER_TRIGGER );
-    if( uart_to_decoder == NULL )
+    StreamBufferHandle_t to_decoder = xStreamBufferCreate( UART_STREAMBUFFER_SIZE, UART_STREAMBUFFER_TRIGGER );
+    ESP_LOGI(TAG, "to_decoder=%p", to_decoder );
+    if( to_decoder == NULL )
     {
-        ESP_LOGE( TAG, "Failed to create StreamBuffer" );
+        ESP_LOGE( TAG, "Failed to create to_decoder StreamBuffer" );
     }
-
 
     // transfere les trames depuis le decodeur vers le client MQTT pour publication
-     QueueHandle_t decoder_to_mqtt = xQueueCreate( 5, sizeof( tic_dataset_t * ) );
-    if( decoder_to_mqtt == NULL )
+     QueueHandle_t to_mqtt = xQueueCreate( 5, sizeof( tic_dataset_t * ) );
+    ESP_LOGI(TAG, "to_mqtt=%p", to_mqtt );
+    if( to_mqtt == NULL )
     {
-        ESP_LOGE( TAG, "Failed to create Queue" );
+        ESP_LOGE( TAG, "Failed to create to_mqtt Queue" );
     }
 
-/*
-    UBaseType_t nb_msg = uxQueueMessagesWaiting(decoder_to_mqtt  );
-    ESP_LOGI( TAG, "decoder_to_mqtt %p : %d msg en attente", decoder_to_mqtt, nb_msg );
-*/
+    // controle la led ptiInfo
+    EventGroupHandle_t to_blink = xEventGroupCreate();
+    ESP_LOGI(TAG, "to_blink=%p", to_blink );
+    if( to_blink == NULL )
+    {
+        ESP_LOGE( TAG, "Failed to create to_blink EventGroup" );
+    }
 
-    nvs_initialise();
-    wifi_initialise();
+    // Reception des infos à afficher sur l'écran OLED
+    QueueHandle_t to_oled = xQueueCreate( 5, sizeof( display_event_t ) );
+    ESP_LOGI(TAG, "to_oled=%p", to_oled );
+    if( to_oled == NULL )
+    {
+        ESP_LOGE( TAG, "Failed to create to_oled Queue" );
+    }
 
 
-    mqtt_task_start( decoder_to_mqtt );
-    tic_decode_start_task( uart_to_decoder, decoder_to_mqtt );
-    uart_task_start( uart_to_decoder );
+    nvs_initialise();    // required for wifi driver
 
-
-
-
-    // blink_led_start_task();
+    oled_task_start( to_oled );
+    blink_led_start_task( to_blink );
+    uart_task_start( to_decoder );
+    tic_decode_start_task( to_decoder, to_mqtt, to_blink, to_oled );
+    wifi_task_start( to_oled );
+    mqtt_task_start( to_mqtt, to_oled );
+  
 }

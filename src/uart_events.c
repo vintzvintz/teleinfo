@@ -12,10 +12,13 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "freertos/stream_buffer.h"
+#include "freertos/event_groups.h"
 #include "driver/uart.h"
 #include "esp_log.h"
 
+#include "inter_task.h"
 #include "uart_events.h"
+
 
 static const char *TAG = "uart_events";
 
@@ -100,6 +103,7 @@ void uart_task_start( StreamBufferHandle_t streambuf_to_decoder )
 {
     /* Configure parameters of an UART driver,
      * communication pins and install the driver */
+#ifdef TIC_MODE_HISTORIQUE
     uart_config_t uart_config_mode_historique = {
         .baud_rate = 1200,
         .data_bits = UART_DATA_7_BITS,
@@ -108,6 +112,7 @@ void uart_task_start( StreamBufferHandle_t streambuf_to_decoder )
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
         .source_clk = UART_SCLK_APB,
     };
+#endif
 
     //Set UART log level
     esp_log_level_set(TAG, ESP_LOG_INFO);
@@ -117,7 +122,7 @@ void uart_task_start( StreamBufferHandle_t streambuf_to_decoder )
     uart_driver_install(UART_TELEINFO_NUM, BUF_SIZE * 2, BUF_SIZE * 2, 20, &uart1_queue, 0);
     uart_param_config(UART_TELEINFO_NUM, &uart_config_mode_historique);
     uart_set_pin(UART_TELEINFO_NUM, UART_PIN_NO_CHANGE, 18, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-    uart_set_rx_full_threshold( UART_TELEINFO_NUM, 16);
+    uart_set_rx_full_threshold( UART_TELEINFO_NUM, TIC_UART_THRESOLD);
 
     //Create a task to handler UART event from ISR
     uart_task_params.to_decoder = streambuf_to_decoder;
