@@ -18,6 +18,7 @@
 #include "mqtt.h"
 #include "oled.h"
 #include "ticled.h"
+#include "status.h"
 
 static const char *TAG = "main_app";
 
@@ -78,7 +79,7 @@ void app_main(void)
         ESP_LOGE( TAG, "Failed to create to_oled Queue" );
     }
 
-
+    status_init( to_oled, to_ticled );
     nvs_initialise();    // required for wifi driver
 
     oled_task_start( to_oled );

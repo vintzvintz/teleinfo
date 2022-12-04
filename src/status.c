@@ -136,8 +136,11 @@ void status_mqtt_disconnected()
 
 
 
-void status_init( QueueHandle_t to_oled, EventGroupHandle_t to_blink)
+void status_init( QueueHandle_t to_oled, EventGroupHandle_t to_ticled )
 {
+    s_to_oled = to_oled;
+    s_to_ticled = to_ticled;
+
     // timers d'expiration du signal serie et du decodeur TIC
     s_wdt_uart = xTimerCreate( "uart_timer", 
                                 STATUS_UART_DEFAULT_TIMEOUT / portTICK_PERIOD_MS, 
@@ -150,22 +153,4 @@ void status_init( QueueHandle_t to_oled, EventGroupHandle_t to_blink)
                                     pdFALSE,
                                     NULL,
                                     uart_timeout );
-
-    // etat initial = pas de donnees serie, pas de connexion wifi
-
-}
-
-void status_task( void *pvParams )
-{
-
-
-
-
-
-    // 
-
-
-
-
-
 }

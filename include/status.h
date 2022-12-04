@@ -9,7 +9,8 @@ typedef enum {
     TIC_MODE_STANDARD,
 } tic_mode_t;
 
-
+// pour initialiser les pointeurs vers les périphériques
+void status_init( QueueHandle_t to_oled, EventGroupHandle_t to_ticled );
 
 // pour notifier la réception de données par l'UART
 void status_rcv_uart( tic_mode_t mode, TickType_t next_before );
