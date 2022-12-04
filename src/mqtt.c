@@ -14,14 +14,14 @@
 #include "freertos/stream_buffer.h"
 #include "freertos/event_groups.h"
 
+#include "esp_log.h"
+#include "mqtt_client.h"
+
 #include "lwip/sockets.h"
 #include "lwip/dns.h"
 #include "lwip/netdb.h"
 
-#include "esp_log.h"
-#include "mqtt_client.h"
-
-#include "inter_task.h"
+#include "tic_decode.h"
 #include "oled.h"
 #include "mqtt.h"
 
@@ -250,7 +250,7 @@ void mqtt_task( void *pvParams )
         }
     }
 
-    ESP_LOGE( TAG, "fatal: mqtt_task exited", err);
+    ESP_LOGE( TAG, "fatal: mqtt_task exited" );
     free(json_buffer);
     esp_mqtt_client_destroy( params->esp_client );
     vTaskDelete(NULL);

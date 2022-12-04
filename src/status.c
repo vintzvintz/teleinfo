@@ -1,18 +1,20 @@
 
-
 #include <stdint.h>
 #include <stdio.h>
-
-#include "freertos/timers.h"
-#include "freertos/event_groups.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "freertos/queue.h"
+#include "freertos/event_groups.h"
+#include "freertos/timers.h"
+
+#include "esp_netif.h"
+#include "esp_log.h"
 #include "esp_wifi.h"
 
 #include "status.h"
-//#include "oled.h"
-//#include "ticled.h"
+#include "oled.h"
+#include "ticled.h"
 
-/*
 
 const char *STATUS_UART_TXT_NOSIGNAL   = "no signal";
 const char *STATUS_UART_TXT_HISTORIQUE = "historique";
@@ -23,8 +25,6 @@ const char *STATUS_TIC_TXT_NODATA = "no data";
 
 const char *STATUS_WIFI_TXT_CONNECTING = "connecting...";
 const char *STATUS_WIFI_TXT_CONNECTED  = "connected";
-*/
-
 
 
 static TimerHandle_t s_wdt_uart;
@@ -34,16 +34,16 @@ static EventGroupHandle_t s_to_ticled;
 static QueueHandle_t s_to_oled;
 
 
+static void tic_timeout()
+{
+    oled_update( s_to_oled, DISPLAY_TIC_STATUS, STATUS_TIC_TXT_NODATA );
+}
+
+
 static void uart_timeout()
 {
     oled_update( s_to_oled, DISPLAY_UART_STATUS, STATUS_UART_TXT_NOSIGNAL );
     tic_timeout();   // TIC cant be up when UART receives no data
-}
-
-
-static void tic_timeout()
-{
-    oled_update( s_to_oled, DISPLAY_TIC_STATUS, STATUS_TIC_TXT_NODATA );
 }
 
 
@@ -110,7 +110,7 @@ void status_wifi_got_ip( esp_netif_ip_info_t *ip_info )
 {
     // send "IP = " to oled(ip)
     char buf[32];
-    snprintf( buf, sizeof(buf), IPSTR, IP2STR( ip_info->ip ) );
+    snprintf( buf, sizeof(buf), IPSTR, IP2STR( &(ip_info->ip) ) );
     oled_update( s_to_oled, DISPLAY_IP_ADDR, buf );
     status_mqtt_disconnected();
 }

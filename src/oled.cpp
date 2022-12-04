@@ -2,6 +2,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include "freertos/stream_buffer.h"
+#include "freertos/event_groups.h"
 #include "driver/gpio.h"
 
 #include "esp_log.h"
@@ -9,8 +11,8 @@
 #include "lcdgfx.h"
 #include "lcdgfx_gui.h"
 
-#include "inter_task.h"
 #include "oled.h"
+#include "tic_decode.h"
 
 
 #if CONFIG_FREERTOS_UNICORE
@@ -30,7 +32,7 @@ void oled_update( QueueHandle_t to_oled, display_event_type_t type, const char* 
 {
     display_event_t evt = {
         .info = type,
-        //.txt[0] = '\0'
+        //.txt = ""
     };
     strncpy( evt.txt, txt, sizeof( evt.txt ) );
     if( xQueueSend( to_oled, &evt, 0 ) != pdTRUE ) 

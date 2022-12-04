@@ -9,10 +9,17 @@
 
 #include "esp_log.h"
 
-#include "inter_task.h"
 #include "ticled.h"
 
 static const char *TAG = "led_blink";
+
+
+/*
+ * Contrôle de la led du PtiInfo avec un EventGroup
+ */
+#define TIC_BIT_COURT    ( 1 << 0 )
+#define TIC_BIT_LONG     ( 1 << 1 )
+
 
 typedef struct led_task_params_s {
     EventGroupHandle_t blink_events;

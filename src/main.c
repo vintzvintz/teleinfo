@@ -12,7 +12,6 @@
 #include "esp_log.h"
 
 
-#include "inter_task.h"
 #include "tic_decode.h"
 #include "uart_events.h"
 #include "wifi.h"

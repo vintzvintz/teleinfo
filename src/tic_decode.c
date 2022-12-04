@@ -9,7 +9,6 @@
 #include "esp_log.h"
 #include "mqtt_client.h"
 
-#include "inter_task.h"
 #include "tic_decode.h"
 #include "oled.h"
 #include "ticled.h"
@@ -21,6 +20,7 @@ static const char *TAG = "tic_decode";
 #define CHAR_CR   '\r'
 #define CHAR_LF   '\n'
 
+#define TIC_MODE_HISTORIQUE
 
 // separateur dans un groupe de données
 #ifdef TIC_MODE_HISTORIQUE
@@ -33,7 +33,7 @@ static const char *TAG = "tic_decode";
 typedef struct tic_taskdecode_params_s {
     StreamBufferHandle_t from_uart;
     QueueHandle_t to_mqtt;
-    EventGroupHandle_t to_blink;
+    EventGroupHandle_t to_ticled;
     QueueHandle_t to_oled;
 } tic_taskdecode_params_t;
 
@@ -60,7 +60,7 @@ typedef struct tic_decoder_s {
     QueueHandle_t to_mqtt;
 
     // event_groups pour faire clignoter la Led
-    EventGroupHandle_t to_blink;
+    EventGroupHandle_t to_ticled;
 
     // queue pour envoyer les trames completes au client mqtt
     QueueHandle_t to_oled;
@@ -129,7 +129,7 @@ static void reset_decoder( tic_decoder_t *td )
 
     // membres conservés
     QueueHandle_t to_mqtt = td->to_mqtt;
-    EventGroupHandle_t to_blink = td->to_blink;
+    EventGroupHandle_t to_ticled = td->to_ticled;
     QueueHandle_t to_oled = td->to_oled;
 
     // desalloue les datasets
@@ -140,7 +140,7 @@ static void reset_decoder( tic_decoder_t *td )
 
     // restaure les membres conservés
     td->to_mqtt = to_mqtt;
-    td->to_blink = to_blink;
+    td->to_ticled = to_ticled;
     td->to_oled = to_oled;
 }
 
@@ -281,7 +281,8 @@ static tic_error_t frame_end( tic_decoder_t *td )
     // tic_dataset_print( td->datasets );
 
     // blink led
-    xEventGroupSetBits( td->to_blink, TIC_BIT_LONG );
+    ticled_blink_long(td->to_ticled);
+    //xEventGroupSetBits( td->to_blink, TIC_BIT_LONG );
     
     
     //uint32_t nb = tic_dataset_count( td->datasets );
@@ -420,7 +421,7 @@ void tic_decode_task( void *pvParams )
     // donnees internes du decodeur
     tic_decoder_t td = {
         .to_mqtt = params->to_mqtt,
-        .to_blink = params->to_blink,
+        .to_ticled = params->to_ticled,
         .to_oled = params->to_oled
     };
 
@@ -437,7 +438,8 @@ void tic_decode_task( void *pvParams )
         size_t n = xStreamBufferReceive( params->from_uart, rx_buf, RX_BUF_SIZE, portMAX_DELAY );
 
         // blink led at each UART receive event
-        xEventGroupSetBits( td.to_blink, TIC_BIT_COURT );
+        //xEventGroupSetBits( td.to_blink, TIC_BIT_COURT );
+        ticled_blink_short( params->to_ticled );
 
         err = process_raw_data( &td, rx_buf, n );
         if( err != TIC_OK )
@@ -452,7 +454,7 @@ void tic_decode_task( void *pvParams )
  /***
   * Create a task to decode teleinfo raw bytestream received from uart
   */
-void tic_decode_start_task( StreamBufferHandle_t from_uart, QueueHandle_t mqtt_queue, EventGroupHandle_t blink_events, QueueHandle_t to_oled )
+void tic_decode_start_task( StreamBufferHandle_t from_uart, QueueHandle_t mqtt_queue, EventGroupHandle_t to_ticled, QueueHandle_t to_oled )
 {
     tic_taskdecode_params_t *tic_task_params = malloc( sizeof(tic_taskdecode_params_t) );
     if( tic_task_params == NULL )
@@ -463,7 +465,7 @@ void tic_decode_start_task( StreamBufferHandle_t from_uart, QueueHandle_t mqtt_q
 
     tic_task_params->from_uart = from_uart;
     tic_task_params->to_mqtt = mqtt_queue;
-    tic_task_params->to_blink = blink_events;
+    tic_task_params->to_ticled = to_ticled;
     tic_task_params->to_oled = to_oled;
     xTaskCreate(tic_decode_task, "tic_decode_task", 4096, (void *)tic_task_params, 12, NULL);
 }

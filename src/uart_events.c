@@ -8,8 +8,8 @@
 #include "freertos/event_groups.h"
 #include "driver/uart.h"
 #include "esp_log.h"
+#include "esp_netif.h"
 
-#include "inter_task.h"
 #include "uart_events.h"
 #include "status.h"
 
@@ -99,7 +99,6 @@ void uart_task_start( StreamBufferHandle_t streambuf_to_decoder )
 {
     /* Configure parameters of an UART driver,
      * communication pins and install the driver */
-#ifdef TIC_MODE_HISTORIQUE
     uart_config_t uart_config_mode_historique = {
         .baud_rate = 1200,
         .data_bits = UART_DATA_7_BITS,
@@ -108,7 +107,6 @@ void uart_task_start( StreamBufferHandle_t streambuf_to_decoder )
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
         .source_clk = UART_SCLK_APB,
     };
-#endif
 
     //Set UART log level
     esp_log_level_set(TAG, ESP_LOG_INFO);
