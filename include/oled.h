@@ -11,16 +11,16 @@ extern "C" {
 
 typedef enum display_event_type_e {
     DISPLAY_NO_UPDATE = 0,
+    DISPLAY_UART_STATUS,
     DISPLAY_TIC_STATUS,
     DISPLAY_WIFI_STATUS,
+    DISPLAY_IP_ADDR,
     DISPLAY_MQTT_STATUS,
     DISPLAY_PAPP,
     DISPLAY_MESSAGE
 } display_event_type_t;
 
-
 #define DISPLAY_EVENT_DATA_SIZE 32
-
 
 typedef struct display_event_s {
     display_event_type_t info;

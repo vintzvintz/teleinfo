@@ -10,7 +10,7 @@
 #include "esp_log.h"
 
 #include "inter_task.h"
-#include "led.h"
+#include "ticled.h"
 
 static const char *TAG = "led_blink";
 
@@ -18,7 +18,21 @@ typedef struct led_task_params_s {
     EventGroupHandle_t blink_events;
 } led_task_params_t;
 
-void blink_led_task( void *pvParams )
+
+
+void ticled_blink_short(EventGroupHandle_t to_ticled ) 
+{
+     xEventGroupSetBits( to_ticled, TIC_BIT_COURT );
+}
+
+void ticled_blink_long(EventGroupHandle_t to_ticled ) 
+{
+    // blink led at each UART receive event
+    xEventGroupSetBits( to_ticled, TIC_BIT_LONG );
+}
+
+
+static void ticled_task( void *pvParams )
 {
     led_task_params_t *params = (led_task_params_t *)pvParams;
 
@@ -58,7 +72,7 @@ void blink_led_task( void *pvParams )
     }
 }
 
-void blink_led_start_task( EventGroupHandle_t blink_events )
+void ticled_start_task( EventGroupHandle_t blink_events )
 {
     led_task_params_t *params = malloc( sizeof(led_task_params_t) );
     if( params ==NULL )
@@ -69,7 +83,7 @@ void blink_led_start_task( EventGroupHandle_t blink_events )
 
     params->blink_events = blink_events;
 
-    xTaskCreate(blink_led_task, "blink_led", 4096, params, 1, NULL);
+    xTaskCreate(ticled_task, "ticled", 4096, params, 1, NULL);
 
 }
 

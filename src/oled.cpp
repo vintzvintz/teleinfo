@@ -22,8 +22,9 @@
 
 static const char *TAG = "oled_task";
 
-/* oled_update est appelé depuis les autres tâche pour envoyer des infos à l'afficheur
-*/
+/*** 
+ * oled_update est appelé depuis les autres tâches pour envoyer des infos à l'afficheur
+ */
 extern "C"
 void oled_update( QueueHandle_t to_oled, display_event_type_t type, const char* txt )
 {
@@ -34,7 +35,7 @@ void oled_update( QueueHandle_t to_oled, display_event_type_t type, const char* 
     strncpy( evt.txt, txt, sizeof( evt.txt ) );
     if( xQueueSend( to_oled, &evt, 0 ) != pdTRUE ) 
     {
-        ESP_LOGI( TAG, "oled_update() a échoué, probablement queue pleine. Type %#x '%s'", evt.info, evt.txt );
+        ESP_LOGI( TAG, "oled_update() echec. Probablement queue pleine. Type %#x '%s'", evt.info, evt.txt );
         //return TIC_ERR_QUEUEFULL;
     }
 //    return TIC_OK;
@@ -59,12 +60,13 @@ class TicDisplay : public DisplaySSD1306_128x64_I2C
 {
 private:
 
-    char tic_mode[32];
-    char wifi_ssid[32];
-    char mqtt_broker[32];
+    char uart_status[20];
+    char tic_status[20];
+    char wifi_ssid[20];
+    char ip_addr[16];
+    char mqtt_broker[20];
     char tic_papp[8];
     char message[64];
-
 
     void set_test1();
     void process_event( const display_event_t &event );
@@ -89,8 +91,10 @@ TicDisplay::TicDisplay( int8_t rstPin, const SPlatformI2cConfig &config ) :
 
 void TicDisplay::reset_data()
 {
-    tic_mode[0] = '\0';
+    uart_status[0] = '\0';
+    tic_status[0] = '\0';
     wifi_ssid[0] = '\0';
+    ip_addr[0] = '\0';
     mqtt_broker[0] = '\0';
     tic_papp[0] = '\0';
     message[0] = '\0';
@@ -99,8 +103,10 @@ void TicDisplay::reset_data()
 
 void TicDisplay::set_test1()
 {
-    strncpy( tic_mode, "Weshmode", sizeof( tic_mode ) );
+    strncpy( uart_status, "WeshUartMode", sizeof( uart_status ) );
+    strncpy( tic_status, "Weshmode", sizeof( tic_status ) );
     strncpy( wifi_ssid, "WeshSSID", sizeof( wifi_ssid ) );
+    strncpy( ip_addr, "51.51.51.51", sizeof( ip_addr ) );
     strncpy( mqtt_broker, "WeshBroker", sizeof( mqtt_broker ) );
     strncpy( message, "Wesh le message de ta mere", sizeof( message ) );
 }
@@ -108,15 +114,6 @@ void TicDisplay::set_test1()
 
 
 #define LINE_HEIGHT 8
-
-#define LINE0  (0 * LINE_HEIGHT)
-#define LINE1  (1 * LINE_HEIGHT)
-#define LINE2  (2 * LINE_HEIGHT)
-#define LINE3  (3 * LINE_HEIGHT)
-#define LINE4  (4 * LINE_HEIGHT)
-#define LINE5  (5 * LINE_HEIGHT)
-#define LINE6  (6 * LINE_HEIGHT)
-#define LINE7  (7 * LINE_HEIGHT)
  
 
 void TicDisplay::refresh()
@@ -125,22 +122,30 @@ void TicDisplay::refresh()
 
     char buf[64];
 
+
     setFixedFont( ssd1306xled_font6x8 );
     clear();
+    int line = 0;
 
-    snprintf( buf, sizeof(buf), " TIC %s", tic_mode );
-    printFixed(0, LINE1, buf, STYLE_NORMAL);
+    snprintf( buf, sizeof(buf), "UART %s", uart_status );
+    printFixed(0, LINE_HEIGHT*(line++), buf, STYLE_NORMAL);
+
+    snprintf( buf, sizeof(buf), " TIC %s", tic_status );
+    printFixed(0, LINE_HEIGHT*(line++), buf, STYLE_NORMAL);
 
     snprintf( buf, sizeof(buf), "Wifi %s", wifi_ssid );
-    printFixed(0, LINE2, buf, STYLE_NORMAL);
+    printFixed(0, LINE_HEIGHT*(line++), buf, STYLE_NORMAL);
+
+    snprintf( buf, sizeof(buf), "  IP %s", ip_addr );
+    printFixed(0, LINE_HEIGHT*(line++), buf, STYLE_NORMAL);
 
     snprintf( buf, sizeof(buf), "MQTT %s", mqtt_broker );
-    printFixed(0, LINE3, buf, STYLE_NORMAL);
+    printFixed(0, LINE_HEIGHT*(line++), buf, STYLE_NORMAL);
 
     snprintf( buf, sizeof(buf), "PAPP %s", tic_papp );
-    printFixed(0, LINE4, buf, STYLE_NORMAL);
+    printFixed(0, LINE_HEIGHT*(line++), buf, STYLE_NORMAL);
 
-    printFixed(0, LINE5, message, STYLE_NORMAL);
+    printFixed(0, LINE_HEIGHT*(line++), message, STYLE_NORMAL);
 
 }
 
@@ -158,7 +163,7 @@ void TicDisplay::setup()
     // display.getInterface().flipHorizontal();
 
     clear();
-    printFixed(0, LINE1, "Init ...", STYLE_NORMAL);
+    printFixed(0, LINE_HEIGHT, "Init ...", STYLE_NORMAL);
 }
 
 
@@ -178,21 +183,27 @@ void TicDisplay::process_event( const display_event_t &event )
 {
     switch( event.info )
     {
+        case DISPLAY_UART_STATUS:
+        strncpy( uart_status, event.txt, sizeof(uart_status) );
+        break;
+
         case DISPLAY_TIC_STATUS:
-        strncpy( tic_mode, event.txt, sizeof(tic_mode) );
+        strncpy( tic_status, event.txt, sizeof(tic_status) );
         break;
 
         case DISPLAY_WIFI_STATUS:
         strncpy( wifi_ssid, event.txt, sizeof(wifi_ssid) );
         break;
 
+        case DISPLAY_IP_ADDR:
+        strncpy( ip_addr, event.txt, sizeof(ip_addr) );
+        break;
+
         case DISPLAY_MQTT_STATUS:
-        ESP_LOGI( TAG, "Oled MQTT update '%s'", event.txt );
         strncpy( mqtt_broker, event.txt, sizeof(mqtt_broker) );
         break;
 
         case DISPLAY_PAPP:
-        ESP_LOGI( TAG, "Oled PAPP update '%s'", event.txt );
         strncpy( tic_papp, event.txt, sizeof(tic_papp) );
         break;
         

@@ -18,7 +18,7 @@
 #include "wifi.h"
 #include "mqtt.h"
 #include "oled.h"
-#include "led.h"
+#include "ticled.h"
 
 static const char *TAG = "main_app";
 
@@ -64,9 +64,9 @@ void app_main(void)
     }
 
     // controle la led ptiInfo
-    EventGroupHandle_t to_blink = xEventGroupCreate();
-    ESP_LOGI(TAG, "to_blink=%p", to_blink );
-    if( to_blink == NULL )
+    EventGroupHandle_t to_ticled = xEventGroupCreate();
+    ESP_LOGI(TAG, "to_blink=%p", to_ticled );
+    if( to_ticled == NULL )
     {
         ESP_LOGE( TAG, "Failed to create to_blink EventGroup" );
     }
@@ -83,9 +83,9 @@ void app_main(void)
     nvs_initialise();    // required for wifi driver
 
     oled_task_start( to_oled );
-    blink_led_start_task( to_blink );
+    ticled_start_task( to_ticled );
     uart_task_start( to_decoder );
-    tic_decode_start_task( to_decoder, to_mqtt, to_blink, to_oled );
+    tic_decode_start_task( to_decoder, to_mqtt, to_ticled, to_oled );
     wifi_task_start( to_oled );
     mqtt_task_start( to_mqtt, to_oled );
   

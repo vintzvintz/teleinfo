@@ -217,8 +217,15 @@ void mqtt_task( void *pvParams )
 
     mqtt_task_param_t *params = (mqtt_task_param_t *)pvParams;
 
-    char *json_buffer = malloc(MQTT_JSON_BUFFER_SIZE);
+    // demarre le client MQTT fourni avec EDF-IDF
+    esp_err_t err;
+    err = esp_mqtt_client_start(params->esp_client);
+    if( err != ESP_OK ) {
+        ESP_LOGE( TAG, "esp_mqtt_client_start() erreur %d", err);
+        //return pdFALSE;
+    }
 
+    char *json_buffer = malloc(MQTT_JSON_BUFFER_SIZE);
     TickType_t max_ticks = MQTT_TIC_TIMEOUT_SEC * 1000 / portTICK_PERIOD_MS; 
     tic_dataset_t *datasets = NULL; 
 
@@ -227,12 +234,14 @@ void mqtt_task( void *pvParams )
         BaseType_t ds_received = xQueueReceive( params->from_decoder, &datasets, max_ticks );
         if( ds_received == pdTRUE )
         {
-            // ESP_LOGD( TAG, "Received dataset %p in mqtt_task()", datasets );
             datasets_to_json( json_buffer, MQTT_JSON_BUFFER_SIZE, datasets );
-            tic_dataset_free( datasets );    /// malloc() dans tic_decode
+            tic_dataset_free( datasets );    ///libère la memoire allouée par tic_decode
 
-            //ESP_LOGI( TAG, "Publishing %d bytes in mqtt_task()", strlen(json_buffer) );
-            esp_mqtt_client_publish( params->esp_client, "/linky/pouet", json_buffer, 0, 0, 0);
+            int msg_id = esp_mqtt_client_publish( params->esp_client, "/linky/pouet", json_buffer, 0, 0, 0);
+            if( msg_id < 0 )
+            {
+                ESP_LOGE( TAG, "Echec de la publication mqtt");
+            }
             //ESP_LOGI( TAG, "Publish done !");
         }
         else
@@ -240,7 +249,10 @@ void mqtt_task( void *pvParams )
             ESP_LOGI( TAG, "Aucune trame téléinfo reçue depuis %d secondes", MQTT_TIC_TIMEOUT_SEC );
         }
     }
+
+    ESP_LOGE( TAG, "fatal: mqtt_task exited", err);
     free(json_buffer);
+    esp_mqtt_client_destroy( params->esp_client );
     vTaskDelete(NULL);
 }
 
@@ -276,11 +288,13 @@ BaseType_t mqtt_task_start( QueueHandle_t from_decoder, QueueHandle_t to_oled )
         return pdFALSE;
     }
 
+    /*
     err = esp_mqtt_client_start(client);
     if( err != ESP_OK ) {
         ESP_LOGE( TAG, "esp_mqtt_client_start() erreur %d", err);
         return pdFALSE;
     }
+    */
 
     // setup inter-task communication stuff
     mqtt_task_param_t *task_params = malloc( sizeof( mqtt_task_param_t ) );
@@ -288,7 +302,7 @@ BaseType_t mqtt_task_start( QueueHandle_t from_decoder, QueueHandle_t to_oled )
     task_params->to_oled = to_oled;
     task_params->esp_client = client;
 
-    // create mqtt client
+    // create mqtt client task
     BaseType_t task_created = xTaskCreate( mqtt_task, "mqtt_task", 4096, task_params, 12, NULL);
     if( task_created != pdPASS )
     {

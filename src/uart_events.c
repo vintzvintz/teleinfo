@@ -1,11 +1,4 @@
-/* UART Events Example
 
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
-*/
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -18,6 +11,7 @@
 
 #include "inter_task.h"
 #include "uart_events.h"
+#include "status.h"
 
 
 static const char *TAG = "uart_events";
@@ -30,6 +24,7 @@ static QueueHandle_t uart1_queue;
 
 typedef struct uart_task_params_s {
     StreamBufferHandle_t to_decoder;
+
 } uart_task_params_t;
 
 
@@ -52,6 +47,7 @@ static void uart_task(void *pvParameters)
                     ESP_LOGD(TAG, "[UART DATA]: %d bytes", event.size);
                     length_read = uart_read_bytes(UART_TELEINFO_NUM, dtmp, event.size, portMAX_DELAY);
                     xStreamBufferSend( task_params->to_decoder, dtmp, length_read, portMAX_DELAY);
+                    status_rcv_uart( TIC_MODE_HISTORIQUE, 0 );
                     //printf("%s",dtmp);
                     break;
                 //Event of HW FIFO overflow detected

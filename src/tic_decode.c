@@ -12,6 +12,7 @@
 #include "inter_task.h"
 #include "tic_decode.h"
 #include "oled.h"
+#include "ticled.h"
 
 static const char *TAG = "tic_decode";
 
@@ -183,7 +184,6 @@ static tic_error_t affiche_dataset( tic_decoder_t *td, const tic_dataset_t *ds )
 {
     if( strcmp( ds->etiquette, "PAPP" ) == 0 )
     {
-
        oled_update( td->to_oled, DISPLAY_PAPP, ds->valeur );
     }
     return TIC_OK;
