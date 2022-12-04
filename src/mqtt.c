@@ -69,23 +69,18 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     
     mqtt_handler_ctx_t *ctx = (mqtt_handler_ctx_t *)handler_args;
 
-    display_event_t oled_evt = {
-        .info = DISPLAY_MQTT_STATUS
-    };
-
     switch ((esp_mqtt_event_id_t)event_id) {
-
     case MQTT_EVENT_BEFORE_CONNECT:
         ESP_LOGI(TAG, "MQTT_EVENT_BEFORE CONNECT");
-        strncpy( oled_evt.txt, "connecting...", sizeof( oled_evt.txt ) );
+        oled_update( ctx->to_oled, DISPLAY_MQTT_STATUS, "connecting" );
         break;
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-        strncpy( oled_evt.txt, "connected", sizeof( oled_evt.txt ) );
+        oled_update( ctx->to_oled, DISPLAY_MQTT_STATUS, "ok" );
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
-        strncpy( oled_evt.txt, "not connected", sizeof( oled_evt.txt ) );
+        oled_update( ctx->to_oled, DISPLAY_MQTT_STATUS, "connecting" );
         break;
     case MQTT_EVENT_SUBSCRIBED:
         ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
@@ -109,20 +104,11 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             log_error_if_nonzero("captured as transport's socket errno",  event->error_handle->esp_transport_sock_errno);
             ESP_LOGI(TAG, "Last errno string (%s)", strerror(event->error_handle->esp_transport_sock_errno));
         }
-        strncpy( oled_evt.txt, "error", sizeof( oled_evt.txt ) );
+        oled_update( ctx->to_oled, DISPLAY_MQTT_STATUS, "error" );
         break;
     default:
         ESP_LOGI(TAG, "Other event id:%d", event->event_id);
         break;
-    }
-
-    if( oled_evt.txt[0] != '\0' )
-    {
-        //ESP_LOGD( TAG, "Updating oled :  %#x '%s' to_oled=%p)", oled_evt.info, oled_evt.txt, ctx->to_oled );
-        if( xQueueSend( ctx->to_oled, &oled_evt, 0) != pdTRUE )
-        {
-            ESP_LOGE( TAG, "failed to update oled");
-        }
     }
 }
 
