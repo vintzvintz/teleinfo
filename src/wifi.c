@@ -18,6 +18,7 @@
 #include "lwip/err.h"
 #include "lwip/sys.h"
 
+#include "status.h"
 #include "wifi.h"
 
 #include "wifi_credentials.h"
@@ -63,6 +64,7 @@ typedef struct wifi_loop_params_s {
 static void reconnect( wifi_loop_params_t *params )
 {
     ESP_LOGD( TAG, "reconnect() evt_group=%p", params->evt_group );
+    status_wifi_sta_connecting();
     xEventGroupClearBits( params->evt_group, (GOT_IP_BIT | WIFI_CONNECTED_BIT) );
     xEventGroupSetBits( params->evt_group, WIFI_TRY_RECONNECT_BIT );
 }
@@ -94,6 +96,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
 
     case WIFI_EVENT_STA_CONNECTED:            /**< ESP32 station connected to AP */
         ESP_LOGI(TAG, "WIFI_EVENT_STA_CONNECTED to ap SSID:%s", TIC_WIFI_SSID );
+        status_wifi_sta_connected( TIC_WIFI_SSID );
         xEventGroupClearBits( params->evt_group, WIFI_TRY_RECONNECT_BIT );
         xEventGroupSetBits( params->evt_group, WIFI_CONNECTED_BIT );
         break;
@@ -124,10 +127,12 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
     case IP_EVENT_STA_GOT_IP:               /*!< station got IP from connected AP */
         ESP_LOGI(TAG, "IP_EVENT_STA_GOT_IP :" IPSTR, IP2STR(&event->ip_info.ip));
         xEventGroupSetBits( params->evt_group, GOT_IP_BIT );
+        status_wifi_got_ip( &(event->ip_info) );
         break;
 
     case IP_EVENT_STA_LOST_IP:              /*!< station lost IP and the IP is reset to 0 */
         ESP_LOGI(TAG, "IP_EVENT_LOST_IP");
+        status_wifi_lost_ip();
         reconnect( params );
         break;
 

@@ -10,6 +10,7 @@
 #include "mqtt_client.h"
 
 #include "tic_decode.h"
+#include "status.h"
 #include "oled.h"
 #include "ticled.h"
 
@@ -276,14 +277,11 @@ static tic_error_t frame_start( tic_decoder_t *td )
 
 static tic_error_t frame_end( tic_decoder_t *td )
 {
-    
     // monitoring sur la console serie
     // tic_dataset_print( td->datasets );
 
-    // blink led
-    ticled_blink_long(td->to_ticled);
-    //xEventGroupSetBits( td->to_blink, TIC_BIT_LONG );
-    
+    // signale la réception de données UART
+    status_rcv_tic_frame( 0 );
     
     //uint32_t nb = tic_dataset_count( td->datasets );
     //uint32_t size = tic_dataset_size( td->datasets );
@@ -436,10 +434,6 @@ void tic_decode_task( void *pvParams )
     tic_error_t err;
     for(;;) {
         size_t n = xStreamBufferReceive( params->from_uart, rx_buf, RX_BUF_SIZE, portMAX_DELAY );
-
-        // blink led at each UART receive event
-        //xEventGroupSetBits( td.to_blink, TIC_BIT_COURT );
-        ticled_blink_short( params->to_ticled );
 
         err = process_raw_data( &td, rx_buf, n );
         if( err != TIC_OK )
