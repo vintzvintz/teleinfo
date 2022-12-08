@@ -30,26 +30,23 @@ static const char *TAG = "oled_task";
 extern "C"
 void oled_update( QueueHandle_t to_oled, display_event_type_t type, const char* txt )
 {
-    display_event_t evt = {
-        .info = type,
-        //.txt = ""
-    };
+    display_event_t evt;
+    evt.info = type;
+
     strncpy( evt.txt, txt, sizeof( evt.txt ) );
     if( xQueueSend( to_oled, &evt, 0 ) != pdTRUE ) 
     {
         ESP_LOGI( TAG, "oled_update() echec. Probablement queue pleine. Type %#x '%s'", evt.info, evt.txt );
-        //return TIC_ERR_QUEUEFULL;
-    }
-//    return TIC_OK;
+    } 
 }
-
 
 const SPlatformI2cConfig tic_default_display_config = { 
     .busId = -1,
     .addr = OLED_I2C_ADDRESS,
     .scl = OLED_GPIO_SCL,
     .sda = OLED_GPIO_SDA,
-    .frequency = 0 };
+    .frequency = 0 
+};
 
 
 
@@ -58,182 +55,174 @@ typedef struct oled_task_param_s {
 } oled_task_param_t;
 
 
+const char *LABEL_UART = "UART";
+const char *LABEL_TIC  = " TIC";
+const char *LABEL_WIFI  = "Wifi";
+const char *LABEL_IP_ADDR  = "  IP";
+const char *LABEL_MQTT_STATUS  = "MQTT";
+const char *LABEL_PAPP  = "PAPP";
+const char *LABEL_MESSAGE  = "MSG:";
+
+#define LINE_BUF_SIZE 32
+#define FONT_HEIGHT 8
+#define FONT_WIDTH  6
+
+
+class DisplayLine 
+{
+private:
+    const char *m_label;
+    uint8_t m_position;
+    uint8_t m_length;
+    char m_newline[LINE_BUF_SIZE];
+    char m_oldline[LINE_BUF_SIZE];
+
+public:
+    DisplayLine( const char *label, uint8_t position, uint8_t length );
+    uint8_t get_position() { return m_position; }
+    void set_info( const char *info);
+    const char * get_txt();
+};
+
+
+DisplayLine::DisplayLine( const char *label, uint8_t position, uint8_t length )
+    : m_label(label)
+    , m_position(position)
+    , m_length(length)
+{ 
+    ESP_LOGD( TAG, "DisplayLine::DisplayLine(%s,%d,%d)", label, position, length );
+    assert( length < LINE_BUF_SIZE );
+    m_newline[0] = '\0';
+    m_oldline[0] = '\0';
+}
+
+
+//uint8_t DisplayLine::set_info( const char *info )
+void DisplayLine::set_info( const char *info )
+{
+    snprintf( m_newline, sizeof(m_newline)-1, "%s %s                           ", m_label, info);
+    m_newline[m_length] = '\0';
+}
+
+ 
+const char* DisplayLine::get_txt()
+{
+    if( strncmp( m_oldline, m_newline, m_length ) == 0 )
+    {
+        return NULL;
+    }
+    strncpy( m_oldline, m_newline, sizeof(m_oldline) );
+    return m_oldline;
+}
+
+
 class TicDisplay : public DisplaySSD1306_128x64_I2C
 {
 private:
+    uint8_t m_font_width;
+    uint8_t m_font_height;
+    DisplayLine *m_lines[DISPLAY_EVENT_TYPE_MAX];
 
-    char uart_status[20];
-    char tic_status[20];
-    char wifi_ssid[20];
-    char ip_addr[16];
-    char mqtt_broker[20];
-    char tic_papp[8];
-    char message[64];
-
-    void set_test1();
-    void process_event( const display_event_t &event );
-
+    void reset_data();
+    void refresh();
+    int line_length();
 
 public: 
     explicit TicDisplay( int8_t rstPin, const SPlatformI2cConfig &config  );
     void setup();
-    void loop_demo();
     void loop_on_queue( QueueHandle_t queue );
-    void reset_data();
-    void refresh();
 };
 
 
-TicDisplay::TicDisplay( int8_t rstPin, const SPlatformI2cConfig &config ) :
-                  DisplaySSD1306_128x64_I2C( rstPin, config )
+TicDisplay::TicDisplay( int8_t rstPin, const SPlatformI2cConfig &config )
+    : DisplaySSD1306_128x64_I2C( rstPin, config )
+    , m_font_width(FONT_WIDTH)
+    , m_font_height(FONT_HEIGHT)
 {
-    reset_data();
+    const uint32_t w = 128 / m_font_width;
+
+    ESP_LOGD( TAG, "TicDisplay::TicDisplay()" );
+    uint8_t i = 0;
+
+    m_lines[DISPLAY_UART_STATUS] = new DisplayLine( LABEL_UART, i++, w );
+    m_lines[DISPLAY_TIC_STATUS] = new DisplayLine( LABEL_TIC, i++, w );
+    m_lines[DISPLAY_WIFI_STATUS] = new DisplayLine( LABEL_WIFI, i++, w);
+    m_lines[DISPLAY_IP_ADDR] = new DisplayLine( LABEL_IP_ADDR, i++, w );
+    m_lines[DISPLAY_MQTT_STATUS] = new DisplayLine( LABEL_MQTT_STATUS, i++, w );
+    m_lines[DISPLAY_PAPP] = new DisplayLine( LABEL_PAPP, i++, w );
+    m_lines[DISPLAY_MESSAGE] = new DisplayLine( LABEL_MESSAGE, i++, w  );
 }
 
 
 void TicDisplay::reset_data()
 {
-    uart_status[0] = '\0';
-    tic_status[0] = '\0';
-    wifi_ssid[0] = '\0';
-    ip_addr[0] = '\0';
-    mqtt_broker[0] = '\0';
-    tic_papp[0] = '\0';
-    message[0] = '\0';
+    ESP_LOGD( TAG, "TicDisplay::reset_data()" );
+    int i;
+    for( i=0; i<DISPLAY_EVENT_TYPE_MAX; i++ )
+    {
+        m_lines[i]->set_info("");
+    }
 }
 
 
-void TicDisplay::set_test1()
+int  TicDisplay::line_length()
 {
-    strncpy( uart_status, "WeshUartMode", sizeof( uart_status ) );
-    strncpy( tic_status, "Weshmode", sizeof( tic_status ) );
-    strncpy( wifi_ssid, "WeshSSID", sizeof( wifi_ssid ) );
-    strncpy( ip_addr, "51.51.51.51", sizeof( ip_addr ) );
-    strncpy( mqtt_broker, "WeshBroker", sizeof( mqtt_broker ) );
-    strncpy( message, "Wesh le message de ta mere", sizeof( message ) );
+    return width() / m_font_width;
 }
-
-
-
-#define LINE_HEIGHT 8
- 
 
 void TicDisplay::refresh()
 {
-    //ESP_LOGI( TAG, "TicDisplay::refresh()" );
-
-    char buf[64];
-
-
     setFixedFont( ssd1306xled_font6x8 );
-    clear();
-    int line = 0;
 
-    snprintf( buf, sizeof(buf), "UART %s", uart_status );
-    printFixed(0, LINE_HEIGHT*(line++), buf, STYLE_NORMAL);
-
-    snprintf( buf, sizeof(buf), " TIC %s", tic_status );
-    printFixed(0, LINE_HEIGHT*(line++), buf, STYLE_NORMAL);
-
-    snprintf( buf, sizeof(buf), "Wifi %s", wifi_ssid );
-    printFixed(0, LINE_HEIGHT*(line++), buf, STYLE_NORMAL);
-
-    snprintf( buf, sizeof(buf), "  IP %s", ip_addr );
-    printFixed(0, LINE_HEIGHT*(line++), buf, STYLE_NORMAL);
-
-    snprintf( buf, sizeof(buf), "MQTT %s", mqtt_broker );
-    printFixed(0, LINE_HEIGHT*(line++), buf, STYLE_NORMAL);
-
-    snprintf( buf, sizeof(buf), "PAPP %s", tic_papp );
-    printFixed(0, LINE_HEIGHT*(line++), buf, STYLE_NORMAL);
-
-    printFixed(0, LINE_HEIGHT*(line++), message, STYLE_NORMAL);
-
+    int n;
+    char buf[LINE_BUF_SIZE];
+    const char *txt;
+    DisplayLine *line;
+    for( n=0; n<DISPLAY_EVENT_TYPE_MAX; n++ )
+    {
+        line = m_lines[n];
+        txt = line->get_txt();   // returns NULL if no refresh is needed
+        if( txt != NULL )
+        {
+            strncpy( buf, txt, sizeof(buf) );
+            printFixed(0, ( m_font_height * line->get_position() ), buf, STYLE_NORMAL );
+            ESP_LOGD( TAG, txt );
+        }
+    }
 }
+
 
 
 void TicDisplay::setup()
 {
+    ESP_LOGD( TAG, "TicDisplay::setup()" );
 
-    /* Select the font to use with menu and all font functions */
+    // Select the font to use with menu and all font functions
     setFixedFont( ssd1306xled_font6x8 );
-
     begin();
 
     /* Uncomment 2 lines below to rotate your ssd1306 display by 180 degrees. */
-    // display.getInterface().flipVertical();
-    // display.getInterface().flipHorizontal();
+    // getInterface().flipVertical();
+    // getInterface().flipHorizontal();
 
     clear();
-    printFixed(0, LINE_HEIGHT, "Init ...", STYLE_NORMAL);
-}
-
-
-void TicDisplay::loop_demo()
-{
+    printFixed(0, height()/3 , "Init ...", STYLE_NORMAL);
     reset_data();
-    refresh();
-    vTaskDelay( 1000 / portTICK_PERIOD_MS );
-
-    set_test1();
-    refresh();
-    vTaskDelay( 1000 / portTICK_PERIOD_MS );
-}
-
-
-void TicDisplay::process_event( const display_event_t &event )
-{
-    switch( event.info )
-    {
-        case DISPLAY_UART_STATUS:
-        strncpy( uart_status, event.txt, sizeof(uart_status) );
-        break;
-
-        case DISPLAY_TIC_STATUS:
-        strncpy( tic_status, event.txt, sizeof(tic_status) );
-        break;
-
-        case DISPLAY_WIFI_STATUS:
-        strncpy( wifi_ssid, event.txt, sizeof(wifi_ssid) );
-        break;
-
-        case DISPLAY_IP_ADDR:
-        strncpy( ip_addr, event.txt, sizeof(ip_addr) );
-        break;
-
-        case DISPLAY_MQTT_STATUS:
-        strncpy( mqtt_broker, event.txt, sizeof(mqtt_broker) );
-        break;
-
-        case DISPLAY_PAPP:
-        strncpy( tic_papp, event.txt, sizeof(tic_papp) );
-        break;
-        
-        case DISPLAY_MESSAGE:
-        strncpy( message, event.txt, sizeof(message) );
-        break;
-
-        default:
-        ESP_LOGE( TAG, "type d'information %#x inconnu", event.info );
-    }
 }
 
 
 void TicDisplay::loop_on_queue( QueueHandle_t queue )
 {
+    ESP_LOGD( TAG, "loop_on_queue()" );
     display_event_t event;
+    clear();
     for(;;)
     {
-        BaseType_t evt_received = xQueueReceive( queue, &event, 5000 / portTICK_PERIOD_MS );
+        BaseType_t evt_received = xQueueReceive( queue, &event, 10000 / portTICK_PERIOD_MS );
         if( evt_received == pdTRUE )
         {
-            ESP_LOGD( TAG, "Oled event %#x '%s' %p", event.info, event.txt, queue );
-            process_event( event );
-        }
-        else
-        {
-            ESP_LOGD( TAG, "Refresh oled after timeout" );
-            // xQueueReceive timeout
+            //ESP_LOGD( TAG, "Oled event %#x '%s' %p", event.info, event.txt, queue );
+            m_lines[ event.info ]->set_info( event.txt );
         }
         refresh();
     }
@@ -251,8 +240,8 @@ static void oled_task(void *pvParams)
 
 extern "C" void oled_task_start( QueueHandle_t to_oled )
 {
+    esp_log_level_set( TAG, ESP_LOG_DEBUG );
     ESP_LOGI( TAG, "oled_task_start()" );
-
 
     oled_task_param_t *task_params = (oled_task_param_t *)malloc( sizeof(oled_task_param_t) );
     if( task_params == NULL )
@@ -260,7 +249,6 @@ extern "C" void oled_task_start( QueueHandle_t to_oled )
         ESP_LOGE( TAG, "malloc() failed" );
         return;
     }
-
     task_params->to_oled = to_oled;
     xTaskCreatePinnedToCore( oled_task, "oled_task", 8192, task_params, 1, NULL, ARDUINO_RUNNING_CORE );
 }
