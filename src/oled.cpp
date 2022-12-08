@@ -186,7 +186,7 @@ void TicDisplay::refresh()
         {
             strncpy( buf, txt, sizeof(buf) );
             printFixed(0, ( m_font_height * line->get_position() ), buf, STYLE_NORMAL );
-            ESP_LOGD( TAG, txt );
+            ESP_LOGD( TAG, "%s", txt );
         }
     }
 }

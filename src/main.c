@@ -76,7 +76,7 @@ void app_main(void)
     }
 
     // Reception des infos à afficher sur l'écran OLED
-    QueueHandle_t to_oled = xQueueCreate( 5, sizeof( display_event_t ) );
+    QueueHandle_t to_oled = xQueueCreate( 50, sizeof( display_event_t ) );
     //ESP_LOGI(TAG, "to_oled=%p", to_oled );
     if( to_oled == NULL )
     {
