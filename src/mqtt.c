@@ -245,7 +245,7 @@ void mqtt_task( void *pvParams )
 
 BaseType_t mqtt_task_start( QueueHandle_t from_decoder, QueueHandle_t to_oled )
 {
-   esp_log_level_set( TAG, ESP_LOG_DEBUG );
+   esp_log_level_set( TAG, ESP_LOG_INFO );
 
    esp_mqtt_client_config_t mqtt_cfg = {
         .uri = TIC_BROKER_URL

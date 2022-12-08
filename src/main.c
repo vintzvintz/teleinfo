@@ -43,13 +43,17 @@ void app_main(void)
 {
     esp_log_level_set(TAG, ESP_LOG_DEBUG);
 
+    esp_log_level_set("wifi", ESP_LOG_WARN);
+    esp_log_level_set("wifi_init", ESP_LOG_WARN);
+
+
     ESP_LOGI(TAG, "[APP] Startup..");
     ESP_LOGI(TAG, "[APP] Free memory: %d bytes", esp_get_free_heap_size());
     ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
 
     // transfere le flux de données brutes depuis l'UART vers le decodeur
     StreamBufferHandle_t to_decoder = xStreamBufferCreate( UART_STREAMBUFFER_SIZE, UART_STREAMBUFFER_TRIGGER );
-    ESP_LOGI(TAG, "to_decoder=%p", to_decoder );
+    //ESP_LOGI(TAG, "to_decoder=%p", to_decoder );
     if( to_decoder == NULL )
     {
         ESP_LOGE( TAG, "Failed to create to_decoder StreamBuffer" );
@@ -57,7 +61,7 @@ void app_main(void)
 
     // transfere les trames depuis le decodeur vers le client MQTT pour publication
      QueueHandle_t to_mqtt = xQueueCreate( 5, sizeof( tic_dataset_t * ) );
-    ESP_LOGI(TAG, "to_mqtt=%p", to_mqtt );
+    //ESP_LOGI(TAG, "to_mqtt=%p", to_mqtt );
     if( to_mqtt == NULL )
     {
         ESP_LOGE( TAG, "Failed to create to_mqtt Queue" );
@@ -65,7 +69,7 @@ void app_main(void)
 
     // controle la led ptiInfo
     EventGroupHandle_t to_ticled = xEventGroupCreate();
-    ESP_LOGI(TAG, "to_blink=%p", to_ticled );
+    //ESP_LOGI(TAG, "to_blink=%p", to_ticled );
     if( to_ticled == NULL )
     {
         ESP_LOGE( TAG, "Failed to create to_blink EventGroup" );
@@ -73,7 +77,7 @@ void app_main(void)
 
     // Reception des infos à afficher sur l'écran OLED
     QueueHandle_t to_oled = xQueueCreate( 5, sizeof( display_event_t ) );
-    ESP_LOGI(TAG, "to_oled=%p", to_oled );
+    //ESP_LOGI(TAG, "to_oled=%p", to_oled );
     if( to_oled == NULL )
     {
         ESP_LOGE( TAG, "Failed to create to_oled Queue" );
