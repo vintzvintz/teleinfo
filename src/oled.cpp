@@ -49,7 +49,6 @@ const SPlatformI2cConfig tic_default_display_config = {
 };
 
 
-
 typedef struct oled_task_param_s {
     QueueHandle_t to_oled;
 } oled_task_param_t;
@@ -97,7 +96,6 @@ DisplayLine::DisplayLine( const char *label, uint8_t position, uint8_t length )
 }
 
 
-//uint8_t DisplayLine::set_info( const char *info )
 void DisplayLine::set_info( const char *info )
 {
     snprintf( m_newline, sizeof(m_newline)-1, "%s %s                           ", m_label, info);
@@ -130,7 +128,7 @@ private:
 public: 
     explicit TicDisplay( int8_t rstPin, const SPlatformI2cConfig &config  );
     void setup();
-    void loop_on_queue( QueueHandle_t queue );
+    void loop( QueueHandle_t queue );
 };
 
 
@@ -140,10 +138,7 @@ TicDisplay::TicDisplay( int8_t rstPin, const SPlatformI2cConfig &config )
     , m_font_height(FONT_HEIGHT)
 {
     const uint32_t w = 128 / m_font_width;
-
-    ESP_LOGD( TAG, "TicDisplay::TicDisplay()" );
     uint8_t i = 0;
-
     m_lines[DISPLAY_UART_STATUS] = new DisplayLine( LABEL_UART, i++, w );
     m_lines[DISPLAY_TIC_STATUS] = new DisplayLine( LABEL_TIC, i++, w );
     m_lines[DISPLAY_WIFI_STATUS] = new DisplayLine( LABEL_WIFI, i++, w);
@@ -156,7 +151,6 @@ TicDisplay::TicDisplay( int8_t rstPin, const SPlatformI2cConfig &config )
 
 void TicDisplay::reset_data()
 {
-    ESP_LOGD( TAG, "TicDisplay::reset_data()" );
     int i;
     for( i=0; i<DISPLAY_EVENT_TYPE_MAX; i++ )
     {
@@ -192,11 +186,8 @@ void TicDisplay::refresh()
 }
 
 
-
 void TicDisplay::setup()
 {
-    ESP_LOGD( TAG, "TicDisplay::setup()" );
-
     // Select the font to use with menu and all font functions
     setFixedFont( ssd1306xled_font6x8 );
     begin();
@@ -211,9 +202,8 @@ void TicDisplay::setup()
 }
 
 
-void TicDisplay::loop_on_queue( QueueHandle_t queue )
+void TicDisplay::loop( QueueHandle_t queue )
 {
-    ESP_LOGD( TAG, "loop_on_queue()" );
     display_event_t event;
     clear();
     for(;;)
@@ -234,7 +224,7 @@ static void oled_task(void *pvParams)
     oled_task_param_t *task_params = (oled_task_param_t *)pvParams;
     TicDisplay display( OLED_GPIO_RST, tic_default_display_config );
     display.setup();
-    display.loop_on_queue( task_params->to_oled );
+    display.loop( task_params->to_oled );
 }
 
 
