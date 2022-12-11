@@ -25,7 +25,7 @@
 #include "mqtt.h"
 #include "oled.h"
 #include "ticled.h"
-#include "timesync.h"
+#include "clock.h"
 #include "status.h"
 
 

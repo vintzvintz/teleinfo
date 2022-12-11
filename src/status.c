@@ -16,7 +16,7 @@
 #include "ticled.h"
 
 
-static const char *TAG = "status.c";
+//static const char *TAG = "status.c";
 
 const char *STATUS_UART_TXT_NOSIGNAL   = "no signal";
 const char *STATUS_UART_TXT_HISTORIQUE = "historique";

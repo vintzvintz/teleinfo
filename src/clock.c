@@ -14,7 +14,7 @@
 // lwIP component
 #include "sntp.h"
 
-#include "timesync.h"
+#include "clock.h"
 #include "status.h"
 #include "wifi.h"
 
