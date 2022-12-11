@@ -15,7 +15,6 @@
 #include "oled.h"
 #include "ticled.h"
 
-
 //static const char *TAG = "status.c";
 
 const char *STATUS_UART_TXT_NOSIGNAL   = "no signal";
@@ -25,8 +24,8 @@ const char *STATUS_UART_TXT_STANDARD   = "standard";
 const char *STATUS_TIC_TXT_OK     = "ok";
 const char *STATUS_TIC_TXT_NODATA = "no data";
 
-const char *STATUS_WIFI_TXT_CONNECTING = "connecting...";
-const char *STATUS_WIFI_TXT_CONNECTED  = "connected";
+const char *STATUS_CONNECTING = "connecting...";
+const char *STATUS_CONNECTED  = "connected";
 
 
 static TimerHandle_t s_wdt_uart;
@@ -92,50 +91,41 @@ void status_rcv_tic_frame( TickType_t next_before)
 
 void status_wifi_sta_connecting( )
 {
-    oled_update( s_to_oled, DISPLAY_WIFI_STATUS, STATUS_WIFI_TXT_CONNECTING );
+    oled_update( s_to_oled, DISPLAY_WIFI_STATUS, STATUS_CONNECTING );
 
     // disbale upper layers 
-    status_wifi_lost_ip();   // clear oled_ip et oled_mqtt
+    //status_wifi_lost_ip();   // clear oled_ip et oled_mqtt
 }
 
 
 void status_wifi_sta_connected( const char *ssid )
 {
-    // send "SSID" to oled_ssid
-    const char *txt = ( ssid == NULL ) ? STATUS_WIFI_TXT_CONNECTED : ssid;
+    const char *txt = ( ssid == NULL ) ? STATUS_CONNECTED : ssid;
     oled_update( s_to_oled, DISPLAY_WIFI_STATUS, txt );
-    status_wifi_lost_ip();   // clear oled_ip et oled_mqtt
+    //status_wifi_lost_ip();   // clear oled_ip et oled_mqtt
 }
 
 
 void status_wifi_got_ip( esp_netif_ip_info_t *ip_info )
 {
-    // send "IP = " to oled(ip)
     char buf[32];
     snprintf( buf, sizeof(buf), IPSTR, IP2STR( &(ip_info->ip) ) );
     oled_update( s_to_oled, DISPLAY_IP_ADDR, buf );
-    status_mqtt_disconnected();
+    // status_mqtt_disconnected();
 }
-
 
 void status_wifi_lost_ip()
 {
-    // clear oled(ip)
-    oled_update( s_to_oled, DISPLAY_IP_ADDR, "" );
-    status_mqtt_disconnected();     // clear oled(mqtt)
+    oled_update( s_to_oled, DISPLAY_IP_ADDR, "--" );
+    // status_mqtt_disconnected(); 
 }
 
-void status_mqtt_connected( const char *broker )
+
+
+void status_mqtt_update( const char *status )
 {
-    oled_update( s_to_oled, DISPLAY_IP_ADDR, "ok" );
+    oled_update( s_to_oled, DISPLAY_MQTT_STATUS, status );
 }
-
-
-void status_mqtt_disconnected()
-{
-    oled_update( s_to_oled, DISPLAY_MQTT_STATUS, "" );
-}
-
 
 
 void status_init( QueueHandle_t to_oled, EventGroupHandle_t to_ticled )
@@ -160,6 +150,5 @@ void status_init( QueueHandle_t to_oled, EventGroupHandle_t to_ticled )
 
 void status_clock_update( const char* time_str)
 {
-    //ESP_LOGI( TAG, "update_time() : %s", time_str );
     oled_update( s_to_oled, DISPLAY_CLOCK, time_str);
 }

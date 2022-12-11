@@ -22,7 +22,7 @@
 #include "lwip/netdb.h"
 
 #include "tic_decode.h"
-#include "oled.h"
+#include "status.h"
 #include "mqtt.h"
 
 static const char *TAG = "mqtt_task";
@@ -72,15 +72,15 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     switch ((esp_mqtt_event_id_t)event_id) {
     case MQTT_EVENT_BEFORE_CONNECT:
         ESP_LOGI(TAG, "MQTT_EVENT_BEFORE CONNECT");
-        oled_update( ctx->to_oled, DISPLAY_MQTT_STATUS, "connecting" );
+        status_mqtt_update( "connecting..." );
         break;
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-        oled_update( ctx->to_oled, DISPLAY_MQTT_STATUS, "ok" );
+        status_mqtt_update( "connected" );
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
-        oled_update( ctx->to_oled, DISPLAY_MQTT_STATUS, "connecting" );
+        status_mqtt_update( "connecting..." );
         break;
     case MQTT_EVENT_SUBSCRIBED:
         ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
@@ -104,7 +104,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             log_error_if_nonzero("captured as transport's socket errno",  event->error_handle->esp_transport_sock_errno);
             ESP_LOGI(TAG, "Last errno string (%s)", strerror(event->error_handle->esp_transport_sock_errno));
         }
-        oled_update( ctx->to_oled, DISPLAY_MQTT_STATUS, "error" );
+        status_mqtt_update( "error" );
         break;
     default:
         ESP_LOGI(TAG, "Other event id:%d", event->event_id);

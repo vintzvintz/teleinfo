@@ -30,8 +30,7 @@ void status_wifi_got_ip( esp_netif_ip_info_t *ip_info );
 void status_wifi_lost_ip();
 
 // pour notifier l'état du client MQTT
-void status_mqtt_connected( const char *broker );
-void status_mqtt_disconnected();
+void status_mqtt_update( const char *status );
 
 // affiche l'heure courante
 void status_clock_update( const char *now );
