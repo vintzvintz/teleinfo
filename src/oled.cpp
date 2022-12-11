@@ -59,6 +59,7 @@ const char *LABEL_TIC  = " TIC";
 const char *LABEL_WIFI  = "Wifi";
 const char *LABEL_IP_ADDR  = "  IP";
 const char *LABEL_MQTT_STATUS  = "MQTT";
+const char *LABEL_CLOCK = "Time";
 const char *LABEL_PAPP  = "PAPP";
 const char *LABEL_MESSAGE  = "MSG:";
 
@@ -89,7 +90,7 @@ DisplayLine::DisplayLine( const char *label, uint8_t position, uint8_t length )
     , m_position(position)
     , m_length(length)
 { 
-    ESP_LOGD( TAG, "DisplayLine::DisplayLine(%s,%d,%d)", label, position, length );
+    //ESP_LOGD( TAG, "DisplayLine::DisplayLine(%s,%d,%d)", label, position, length );
     assert( length < LINE_BUF_SIZE );
     m_newline[0] = '\0';
     m_oldline[0] = '\0';
@@ -139,6 +140,7 @@ TicDisplay::TicDisplay( int8_t rstPin, const SPlatformI2cConfig &config )
 {
     const uint32_t w = 128 / m_font_width;
     uint8_t i = 0;
+    m_lines[DISPLAY_CLOCK] = new DisplayLine( LABEL_CLOCK, i++, w );
     m_lines[DISPLAY_UART_STATUS] = new DisplayLine( LABEL_UART, i++, w );
     m_lines[DISPLAY_TIC_STATUS] = new DisplayLine( LABEL_TIC, i++, w );
     m_lines[DISPLAY_WIFI_STATUS] = new DisplayLine( LABEL_WIFI, i++, w);
@@ -146,6 +148,8 @@ TicDisplay::TicDisplay( int8_t rstPin, const SPlatformI2cConfig &config )
     m_lines[DISPLAY_MQTT_STATUS] = new DisplayLine( LABEL_MQTT_STATUS, i++, w );
     m_lines[DISPLAY_PAPP] = new DisplayLine( LABEL_PAPP, i++, w );
     m_lines[DISPLAY_MESSAGE] = new DisplayLine( LABEL_MESSAGE, i++, w  );
+
+    assert(i==DISPLAY_EVENT_TYPE_MAX);    //  nombre de DisplayLines incorrect
 }
 
 

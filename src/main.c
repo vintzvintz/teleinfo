@@ -1,5 +1,10 @@
 
 
+
+
+#define LWIP_DEBUG 1
+
+
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -12,13 +17,19 @@
 #include "esp_log.h"
 
 
+#include "sntp.h"
+
 #include "tic_decode.h"
 #include "uart_events.h"
 #include "wifi.h"
 #include "mqtt.h"
 #include "oled.h"
 #include "ticled.h"
+#include "timesync.h"
 #include "status.h"
+
+
+
 
 static const char *TAG = "main_app";
 
@@ -85,12 +96,13 @@ void app_main(void)
 
     status_init( to_oled, to_ticled );
     nvs_initialise();    // required for wifi driver
+    wifi_task_start( );
 
     oled_task_start( to_oled );
     ticled_start_task( to_ticled );
+
     uart_task_start( to_decoder );
     tic_decode_start_task( to_decoder, to_mqtt, to_ticled, to_oled );
-    wifi_task_start( to_oled );
     mqtt_task_start( to_mqtt, to_oled );
-  
+    clock_task_start( );
 }

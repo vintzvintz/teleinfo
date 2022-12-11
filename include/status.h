@@ -1,4 +1,7 @@
 
+
+
+
 #define STATUS_UART_DEFAULT_TIMEOUT       500     // ms
 #define STATUS_TICFRAME_DEFAUT_TIMEOUT   2000    // ms
 
@@ -29,3 +32,6 @@ void status_wifi_lost_ip();
 // pour notifier l'état du client MQTT
 void status_mqtt_connected( const char *broker );
 void status_mqtt_disconnected();
+
+// affiche l'heure courante
+void status_clock_update( const char *now );

@@ -16,6 +16,8 @@
 #include "ticled.h"
 
 
+static const char *TAG = "status.c";
+
 const char *STATUS_UART_TXT_NOSIGNAL   = "no signal";
 const char *STATUS_UART_TXT_HISTORIQUE = "historique";
 const char *STATUS_UART_TXT_STANDARD   = "standard";
@@ -153,4 +155,11 @@ void status_init( QueueHandle_t to_oled, EventGroupHandle_t to_ticled )
                                     pdFALSE,
                                     NULL,
                                     uart_timeout );
+}
+
+
+void status_clock_update( const char* time_str)
+{
+    //ESP_LOGI( TAG, "update_time() : %s", time_str );
+    oled_update( s_to_oled, DISPLAY_CLOCK, time_str);
 }

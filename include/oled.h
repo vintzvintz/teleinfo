@@ -16,6 +16,7 @@ typedef enum display_event_type_e {
     DISPLAY_IP_ADDR,
     DISPLAY_MQTT_STATUS,
     DISPLAY_PAPP,
+    DISPLAY_CLOCK,
     DISPLAY_MESSAGE,
     DISPLAY_EVENT_TYPE_MAX
 } display_event_type_t;
