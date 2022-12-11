@@ -4,8 +4,6 @@
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
 #include "freertos/stream_buffer.h"
-
-#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #include "esp_log.h"
 #include "mqtt_client.h"
 
