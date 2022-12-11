@@ -185,6 +185,7 @@ static tic_error_t affiche_dataset( tic_decoder_t *td, const tic_dataset_t *ds )
     {
        oled_update( td->to_oled, DISPLAY_PAPP, ds->valeur );
     }
+    //ESP_LOGD ( TAG, "%s %s", ds->etiquette, ds->valeur);
     return TIC_OK;
 }
 
@@ -410,8 +411,6 @@ static tic_error_t process_raw_data( tic_decoder_t* td, const tic_char_t *buf, s
 
 void tic_decode_task( void *pvParams )
 {
-    esp_log_level_set( TAG, ESP_LOG_INFO );
-
     tic_taskdecode_params_t *params = (tic_taskdecode_params_t *)pvParams;
 
     // donnees internes du decodeur
@@ -448,6 +447,9 @@ void tic_decode_task( void *pvParams )
   */
 void tic_decode_start_task( StreamBufferHandle_t from_uart, QueueHandle_t mqtt_queue, EventGroupHandle_t to_ticled, QueueHandle_t to_oled )
 {
+
+    esp_log_level_set( TAG, ESP_LOG_INFO );
+
     tic_taskdecode_params_t *tic_task_params = malloc( sizeof(tic_taskdecode_params_t) );
     if( tic_task_params == NULL )
     {
