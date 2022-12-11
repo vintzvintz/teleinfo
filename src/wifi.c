@@ -60,21 +60,30 @@ typedef struct wifi_loop_params_s {
     esp_event_handler_instance_t handler_instance_ip;
 } wifi_loop_params_t;
 
+static wifi_loop_params_t s_wifi_params;
 
-static void reconnect( wifi_loop_params_t *params )
+/*
+// pour synchronisation d'autres tâches
+BaseType_t wifi_wait_ipaddr()
 {
-    ESP_LOGD( TAG, "reconnect() evt_group=%p", params->evt_group );
+    ESP_LOGI( TAG, "wifi_wait_ipaddr()");
+    EventBits_t bits = xEventGroupWaitBits( s_wifi_params.evt_group, GOT_IP_BIT | WIFI_CONNECTED_BIT , pdFALSE, pdTRUE, portMAX_DELAY );
+    return ( bits & ( GOT_IP_BIT | WIFI_CONNECTED_BIT ) ) ? pdTRUE : pdFALSE;
+}
+*/
+
+static void reconnect()
+{
+    ESP_LOGD( TAG, "reconnect()" );
     status_wifi_sta_connecting();
-    xEventGroupClearBits( params->evt_group, (GOT_IP_BIT | WIFI_CONNECTED_BIT) );
-    xEventGroupSetBits( params->evt_group, WIFI_TRY_RECONNECT_BIT );
+    xEventGroupClearBits( s_wifi_params.evt_group, (GOT_IP_BIT | WIFI_CONNECTED_BIT) );
+    xEventGroupSetBits( s_wifi_params.evt_group, WIFI_TRY_RECONNECT_BIT );
 }
 
 
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                int32_t event_id, void* event_data)
 {
-    wifi_loop_params_t *params = (wifi_loop_params_t *)arg;
-
     switch( event_id )
     {
     case WIFI_EVENT_WIFI_READY:               /**< ESP32 WiFi ready */
@@ -87,7 +96,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     
     case WIFI_EVENT_STA_START:                /**< ESP32 station start */
         ESP_LOGD( TAG, "WIFI_EVENT_STA_START" );
-        reconnect( params );
+        reconnect( );
         break;
 
     case WIFI_EVENT_STA_STOP:                 /**< ESP32 station stop */
@@ -97,13 +106,13 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     case WIFI_EVENT_STA_CONNECTED:            /**< ESP32 station connected to AP */
         ESP_LOGI(TAG, "WIFI_EVENT_STA_CONNECTED to ap SSID:%s", TIC_WIFI_SSID );
         status_wifi_sta_connected( TIC_WIFI_SSID );
-        xEventGroupClearBits( params->evt_group, WIFI_TRY_RECONNECT_BIT );
-        xEventGroupSetBits( params->evt_group, WIFI_CONNECTED_BIT );
+        xEventGroupClearBits( s_wifi_params.evt_group, WIFI_TRY_RECONNECT_BIT );
+        xEventGroupSetBits( s_wifi_params.evt_group, WIFI_CONNECTED_BIT );
         break;
 
     case WIFI_EVENT_STA_DISCONNECTED:         /**< ESP32 station disconnected from AP */
         ESP_LOGD( TAG, "WIFI_EVENT_STA_DISCONNECTED" );
-        reconnect( params );
+        reconnect( );
         break;
 
     case WIFI_EVENT_STA_AUTHMODE_CHANGE:      /**< the auth mode of AP connected by ESP32 station changed */
@@ -119,21 +128,20 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
 static void ip_event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
 {
-    wifi_loop_params_t *params = (wifi_loop_params_t *)arg;
     ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
 
     switch( event_id ) 
     {
     case IP_EVENT_STA_GOT_IP:               /*!< station got IP from connected AP */
         ESP_LOGI(TAG, "IP_EVENT_STA_GOT_IP :" IPSTR, IP2STR(&event->ip_info.ip));
-        xEventGroupSetBits( params->evt_group, GOT_IP_BIT );
+        xEventGroupSetBits( s_wifi_params.evt_group, GOT_IP_BIT );
         status_wifi_got_ip( &(event->ip_info) );
         break;
 
     case IP_EVENT_STA_LOST_IP:              /*!< station lost IP and the IP is reset to 0 */
         ESP_LOGI(TAG, "IP_EVENT_LOST_IP");
         status_wifi_lost_ip();
-        reconnect( params );
+        reconnect();
         break;
 
     default:
@@ -142,7 +150,7 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
 }
 
 
-int wifi_initialise(  wifi_loop_params_t *params )
+int wifi_initialise()
 {
     ESP_ERROR_CHECK(esp_netif_init());
 
@@ -155,14 +163,14 @@ int wifi_initialise(  wifi_loop_params_t *params )
     ESP_ERROR_CHECK( esp_event_handler_instance_register( WIFI_EVENT,
                                                           ESP_EVENT_ANY_ID,
                                                           &wifi_event_handler,
-                                                          (void *)params,
-                                                          &(params->handler_instance_wifi)));
+                                                          NULL,
+                                                          &(s_wifi_params.handler_instance_wifi)));
 
     ESP_ERROR_CHECK( esp_event_handler_instance_register(IP_EVENT,
                                                          IP_EVENT_STA_GOT_IP,
                                                          &ip_event_handler,
-                                                         (void *)params,
-                                                         &(params->handler_instance_ip)));
+                                                         NULL,
+                                                         &(s_wifi_params.handler_instance_ip)));
 
     wifi_config_t wifi_config = {
         .sta = {
@@ -182,26 +190,25 @@ int wifi_initialise(  wifi_loop_params_t *params )
     return ESP_OK;
 }
 
-void wifi_loop( void *pvParams )
+void wifi_loop( void * pvParams )
 {
-    wifi_loop_params_t *params = (wifi_loop_params_t *)pvParams;
     ESP_LOGD( TAG, "wifi_loop()" );
 
     for(;;)
     {
-        EventBits_t bits = xEventGroupWaitBits( params->evt_group, WIFI_TRY_RECONNECT_BIT, pdFALSE, pdFALSE, portMAX_DELAY );
+        EventBits_t bits = xEventGroupWaitBits( s_wifi_params.evt_group, WIFI_TRY_RECONNECT_BIT, pdFALSE, pdFALSE, portMAX_DELAY );
         if( bits & (GOT_IP_BIT|WIFI_CONNECTED_BIT) )
         {
             ESP_LOGE( TAG, "GOT_IP_BIT or WIFI_CONNECTED_BIT not cleared before reconnection attempt");
         }
-        xEventGroupClearBits( params->evt_group, (GOT_IP_BIT | WIFI_CONNECTED_BIT) );
+        xEventGroupClearBits( s_wifi_params.evt_group, (GOT_IP_BIT | WIFI_CONNECTED_BIT) );
 
         ESP_LOGD( TAG, "esp_wifi_connect()" );
         esp_err_t err = esp_wifi_connect();
         if( err != ESP_OK )
         {
             ESP_LOGE( TAG, "esp_wifi_connect() error %#x" , err );
-            reconnect( params );
+            reconnect();
         }
         vTaskDelay( WIFI_RECONNECT_LOOP_DELAY / portTICK_PERIOD_MS );   // wait for typical connection time before retrying
     }
@@ -209,30 +216,23 @@ void wifi_loop( void *pvParams )
 }
 
 
-void wifi_task_start( QueueHandle_t to_oled )
+void wifi_task_start( )
 {
     esp_log_level_set(TAG, ESP_LOG_DEBUG);
 
-    wifi_loop_params_t *params = calloc(1, sizeof(wifi_loop_params_t) );
-    if( params == NULL )
-    {
-        ESP_LOGE( TAG, "malloc() failed");
-        return;
-    }
-
     // FreeRTOS event group to signal when we are connected
-    params->evt_group = xEventGroupCreate();
-    if( params->evt_group == NULL )
+    s_wifi_params.evt_group = xEventGroupCreate();
+    if( s_wifi_params.evt_group == NULL )
     {
         ESP_LOGE( TAG, "Could not create wifi event group" );
         return;
     }
 
-    if( wifi_initialise( params ) < 0 )
+    if( wifi_initialise() < 0 )
     {
         ESP_LOGE( TAG, "erreur wifi_initialise()" );
         return;
     }
 
-    xTaskCreate( wifi_loop, "wifi_task", 4096, params, 10, NULL );
+    xTaskCreate( wifi_loop, "wifi_task", 4096, NULL, 10, NULL );
 }
