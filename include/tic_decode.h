@@ -47,6 +47,7 @@ tic_error_t tic_dataset_print( tic_dataset_t *dataset );
 uint32_t tic_dataset_count( tic_dataset_t *dataset );
 uint32_t tic_dataset_size( tic_dataset_t *dataset );
 void tic_dataset_free( tic_dataset_t *dataset );
+tic_dataset_t * tic_dataset_sort(tic_dataset_t *ds);
 
 
 /* creation initiale de la tache */

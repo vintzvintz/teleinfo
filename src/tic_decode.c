@@ -121,6 +121,106 @@ void tic_dataset_free( tic_dataset_t *ds )
     }
 }
 
+/*
+static int my_strcmp( const char * s1, const char *s2 )
+{
+    int ret = strcmp( s1, s2 );
+    ESP_LOGD( TAG, "strcmp( %s, %s ) = %d",s1,s2,ret);
+    return ret;
+}
+
+
+static void debug_list( const char *nom, tic_dataset_t *ds )
+{
+    char buf[256];
+    int pos = 0;
+    pos += snprintf( buf, sizeof(buf), "%s = ", nom );
+    while( ds != NULL )
+    {
+        pos += snprintf( &buf[pos], sizeof(buf), "%s->", ds->etiquette );
+        ds = ds->next;
+    }
+    ESP_LOGD( TAG, "%s", buf);
+}
+*/
+
+static tic_dataset_t* insert_sort( tic_dataset_t *sorted, tic_dataset_t *ds)
+{
+    assert( ds != NULL );           // l'insertion de NULL est invalide
+    assert( ds->next == NULL );     // ds doit être un element isolé, le ptr sur le suivant doit rester chez l'appelant
+
+    tic_dataset_t *item = sorted;
+
+    while( item != NULL )
+    {
+        //ESP_LOGD( TAG, "essaye d'inserer %s sur %s", ds->etiquette, item->etiquette );
+
+        if( strcmp( ds->etiquette, item->etiquette ) < 0 )
+        {
+            // ds est plus petit que l'élément courant
+            assert( item == sorted ); // impossible sauf pour le premier element de la liste triée
+            //ESP_LOGD( TAG, "insere %s avant %s (en premier)", ds->etiquette, item->etiquette );
+            ds->next = item;
+            sorted = ds;
+            break;
+        }
+        // ds est plus grand que l'élément courant
+        // on l'insère dans la liste si 
+        //    s'il est plus petit que l'élément suivant,
+        //    ou s'il n'y a pas d'élement suivant 
+        if ( (item->next == NULL) || (strcmp( ds->etiquette, item->next->etiquette ) <= 0 ) )
+        {
+            /*
+            if( item->next == NULL )
+            {
+                ESP_LOGD( TAG, "insere %s après %s (en dernier)", ds->etiquette, item->etiquette );
+            }
+            else
+            {
+                ESP_LOGD( TAG, "insere %s après %s et avant %s", ds->etiquette, item->etiquette, item->next->etiquette );
+            }
+            */
+            ds->next = item->next;
+            item->next = ds;
+            break;
+        }
+        item = item->next;
+    }
+
+    if( sorted == NULL )
+    {
+        //ESP_LOGD( TAG, "la liste triée est vide, renvoie %s", ds->etiquette );
+        sorted = ds;
+    }
+
+    return sorted;
+
+}
+
+
+tic_dataset_t * tic_dataset_sort(tic_dataset_t *ds)
+{
+    tic_dataset_t * sorted = NULL;
+    tic_dataset_t * ds_next = NULL;
+
+
+    while( ds != NULL )
+    {
+        //ESP_LOGD( TAG, "tic_dataset_sort(%s)", ds->etiquette );
+        //debug_list("ds", ds);
+
+        // copie le ptr vers l'item suivant car ds->next va être modifié lors de son insertion dans 'sorted'
+        ds_next = ds->next;
+        ds->next=NULL;
+
+        sorted = insert_sort( sorted, ds );
+        //debug_list( "sorted", sorted);
+        ds = ds_next;
+    }
+    return sorted;
+}
+
+
 
 static void reset_decoder( tic_decoder_t *td )
 {
@@ -168,6 +268,8 @@ static tic_error_t dataset_start( tic_decoder_t *td )
 }
 
 
+// ajoute chaque caractere de la chaine buf à la somme s1
+// TODO : ajouter un parametre avec la taille max du buffer
 static void addbuf( uint32_t *s1, const tic_char_t *buf )
 {
     const tic_char_t *p = buf;
@@ -277,11 +379,18 @@ static tic_error_t frame_start( tic_decoder_t *td )
 static tic_error_t frame_end( tic_decoder_t *td )
 {
     // monitoring sur la console serie
-    // tic_dataset_print( td->datasets );
+    ESP_LOGD( TAG, "Avant tri" );
+    tic_dataset_print( td->datasets );
+
+    td->datasets = tic_dataset_sort( td->datasets );
+    ESP_LOGD( TAG, "Après tri" );
+    tic_dataset_print( td->datasets );
+
 
     // signale la réception de données UART
     status_rcv_tic_frame( 0 );
     
+ 
     //uint32_t nb = tic_dataset_count( td->datasets );
     //uint32_t size = tic_dataset_size( td->datasets );
     //ESP_LOGI( TAG, "Trame de %d datasets %d bytes (%p)", nb, size, td->datasets );
@@ -448,7 +557,7 @@ void tic_decode_task( void *pvParams )
 void tic_decode_start_task( StreamBufferHandle_t from_uart, QueueHandle_t mqtt_queue, EventGroupHandle_t to_ticled, QueueHandle_t to_oled )
 {
 
-    esp_log_level_set( TAG, ESP_LOG_INFO );
+    esp_log_level_set( TAG, ESP_LOG_DEBUG );
 
     tic_taskdecode_params_t *tic_task_params = malloc( sizeof(tic_taskdecode_params_t) );
     if( tic_task_params == NULL )
