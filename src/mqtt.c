@@ -118,27 +118,25 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 }
 
 
-static int is_label_in_list( const char *label, const char *list[], size_t nb )
+static int find_label_in_list( const char *label, const char *list[], size_t nb )
 {
     for( int i=0; i<nb; i++ )
     {
         if( strcmp( label, list[i] ) == 0 )
-        {
             return i;
-        }
     }
     return -1;
 }
 
 
-static int is_label_published( const char *label )
+static int is_published( const tic_dataset_t *ds )
 {
-    return is_label_in_list( label, PUBLISHED_DATA, PUBLISEHD_DATA_COUNT ) >= 0;
+    return find_label_in_list( ds->etiquette, PUBLISHED_DATA, PUBLISEHD_DATA_COUNT ) >= 0;
 }
 
-static int is_label_integer( const char *label )
+static int is_integer( const tic_dataset_t *ds )
 {
-    return is_label_in_list( label, NUMERIC_DATA, NUMERIC_DATA_COUNT ) >= 0;
+    return find_label_in_list(  ds->etiquette, NUMERIC_DATA, NUMERIC_DATA_COUNT ) >= 0;
 }
 
 
@@ -146,11 +144,11 @@ static const char *FORMAT_STRING_SANS_HORODATE = "  {\"lbl\": \"%s\", \"val\": \
 static const char *FORMAT_STRING_AVEC_HORODATE = "  {\"lbl\": \"%s\", \"ts\": \"%s\", \"val\": \"%s\" }";
 static const char *FORMAT_NUMERIC_SANS_HORODATE = "  {\"lbl\": \"%s\", \"val\": %d }";
 static const char *FORMAT_NUMERIC_AVEC_HORODATE = "  {\"lbl\": \"%s\", \"ts\": \"%s\", \"val\": %d }";
-
+static const char *FORMAT_ISO8601 = "%Y-%m-%dT%H:%M:%S%z";
 
 static size_t printf_ds( char *buf, size_t size, const tic_dataset_t *ds )
 {
-    if( is_label_integer( ds->etiquette ) )
+    if( is_integer( ds ) )
     {
         // formatte la valeur numerique avec ou sans horodate
         uint32_t val = strtol( ds->valeur, NULL, 10 );
@@ -178,17 +176,82 @@ static size_t printf_ds( char *buf, size_t size, const tic_dataset_t *ds )
 }
 
 
+static size_t get_time_iso8601( char *buf, size_t size )
+{
+    time_t now = time(NULL);
+    struct tm timeinfo;
+    localtime_r( &now, &timeinfo );
+    return strftime( buf, size, FORMAT_ISO8601, &timeinfo );
+}
+
+
+static tic_dataset_t *filtre_datasets( tic_dataset_t *ds )
+{
+    tic_dataset_t *head = NULL; 
+    tic_dataset_t *tail = NULL;   // pointeur sur la queue pour conserver l'ordre
+    while( ds != NULL )
+    {
+        tic_dataset_t *tmp_next = ds->next;
+        ds->next = NULL;
+
+        if( is_published( ds ) )
+        {
+            if( !head )
+                head = ds;
+
+            if( !tail )
+                tail = ds;
+
+            tail->next = ds;
+            tail = ds;
+        }
+        else
+        {
+            free(ds);
+        }
+        ds = tmp_next;
+    }
+    return head;
+}
+
+// compare deux trames - les datasets doivent être triés !
+int compare_datasets( const tic_dataset_t *ds1, const tic_dataset_t *ds2 )
+{
+    while( (ds1!=NULL) && (ds2!= NULL) )
+    {
+        int cmp_label = strncmp( ds1->etiquette, ds2->etiquette, sizeof( ds1->etiquette) );
+        if( cmp_label != 0 )
+            return cmp_label;
+
+        int cmp_value = strncmp( ds1->valeur, ds2->valeur, sizeof( ds1->valeur) );
+        if( cmp_value != 0 )
+            return cmp_value;
+
+        ds1 = ds1->next;
+        ds2 = ds2->next;
+    }
+    // nombre de datasets différents ?
+    if( (ds1!=NULL) || (ds2!=NULL) )
+        return -1;
+
+    return 0;
+}
+
 static mqtt_error_t datasets_to_json( char *buf, size_t size, const tic_dataset_t *ds )
 {
     size_t pos = 0;
 
-    pos += snprintf( &(buf[pos]), size-pos, "{ \"tic_frame\" : [\n" );
+    char time_buf[30];
+    get_time_iso8601( time_buf, sizeof(time_buf) );
+
+    pos += snprintf( &(buf[pos]), size-pos, "{  \"horodate\" : \"%s\",\n  \"tic_frame\" : [\n", time_buf );
 
     while( ds!=NULL && (size-pos) > 0 )
     {
         // ignore les etiquettes non exportées 
-        if( is_label_published( ds->etiquette ) == 0  )
+        if( is_published( ds ) == 0  )
         {
+            ESP_LOGE( TAG, "Probleme avec le filtrage en amont de datasets_to_json()");
             ds = ds->next;
             continue;
         }
@@ -219,7 +282,6 @@ static mqtt_error_t datasets_to_json( char *buf, size_t size, const tic_dataset_
         ESP_LOGE( TAG, "JSON buffer overflow" );
         return MQTT_ERR_OVERFLOW;
     }
-
     return MQTT_OK;
 }
 
@@ -233,29 +295,41 @@ void mqtt_task( void *pvParams )
     // demarre le client MQTT fourni avec EDF-IDF
     esp_err_t err;
     err = esp_mqtt_client_start(params->esp_client);
-    if( err != ESP_OK ) {
+    if( esp_mqtt_client_start(params->esp_client) != ESP_OK ) {
         ESP_LOGE( TAG, "esp_mqtt_client_start() erreur %d", err);
     }
 
     char *json_buffer = malloc(MQTT_JSON_BUFFER_SIZE);
     TickType_t max_ticks = MQTT_TIC_TIMEOUT_SEC * 1000 / portTICK_PERIOD_MS; 
-    tic_dataset_t *datasets = NULL; 
-
-    mqtt_error_t mqtt_err;
+    tic_dataset_t *ds_last = NULL; 
+    tic_dataset_t *ds_new = NULL;
     for(;;)
     {
-        tic_dataset_free( datasets );    ///libère la memoire allouée par tic_decode
-        datasets = NULL;
+        tic_dataset_free( ds_new );    ///libère la memoire allouée par tic_decode
+        ds_new = NULL;
 
-        BaseType_t ds_received = xQueueReceive( params->from_decoder, &datasets, max_ticks );
+        BaseType_t ds_received = xQueueReceive( params->from_decoder, &ds_new, max_ticks );
         if( ds_received != pdTRUE )
         {
-            ESP_LOGI( TAG, "Aucune trame téléinfo reçue depuis %d secondes", MQTT_TIC_TIMEOUT_SEC );
+            ESP_LOGI( TAG, "Aucune trame téléinfo reçue depuis %d secondes (%p)", MQTT_TIC_TIMEOUT_SEC, ds_new );
+            continue;
+        }
+        ds_new = filtre_datasets( ds_new );
+
+        if( compare_datasets( ds_last, ds_new ) != 0 )
+        {
+            // les donnnees ont changé, on les garde et on les publie
+            tic_dataset_free( ds_last );
+            ds_last = ds_new;
+            ds_new = NULL;
+        }
+        else
+        {
+            //ESP_LOGD( TAG, "Données non modifiées donc non publiées");
             continue;
         }
 
-        mqtt_err = datasets_to_json( json_buffer, MQTT_JSON_BUFFER_SIZE, datasets );
-        if( mqtt_err != MQTT_OK )
+        if( datasets_to_json( json_buffer, MQTT_JSON_BUFFER_SIZE, ds_last ) != MQTT_OK )
         {
             continue;
         }
@@ -276,7 +350,7 @@ void mqtt_task( void *pvParams )
 
 BaseType_t mqtt_task_start( QueueHandle_t from_decoder, QueueHandle_t to_oled )
 {
-   esp_log_level_set( TAG, ESP_LOG_INFO );
+   esp_log_level_set( TAG, ESP_LOG_DEBUG );
 
    esp_mqtt_client_config_t mqtt_cfg = {
         .uri = TIC_BROKER_URL
