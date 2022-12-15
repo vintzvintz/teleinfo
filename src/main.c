@@ -103,6 +103,6 @@ void app_main(void)
 
     uart_task_start( to_decoder );
     tic_decode_start_task( to_decoder, to_mqtt, to_ticled, to_oled );
-    mqtt_task_start( to_mqtt, to_oled );
+    mqtt_task_start( to_mqtt );
     clock_task_start( );
 }

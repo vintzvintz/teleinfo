@@ -44,12 +44,6 @@ typedef struct mqtt_task_param_s {
     esp_mqtt_client_handle_t esp_client;
 } mqtt_task_param_t;
 
-
-typedef struct mqtt_handler_ctx_s {
-    QueueHandle_t to_oled;
-} mqtt_handler_ctx_t;
-
-
 static void log_error_if_nonzero(const char *message, int error_code)
 {
     if (error_code != 0) {
@@ -338,7 +332,7 @@ void mqtt_task( void *pvParams )
 }
 
 
-BaseType_t mqtt_task_start( QueueHandle_t from_decoder, QueueHandle_t to_oled )
+BaseType_t mqtt_task_start( QueueHandle_t from_decoder )
 {
    esp_log_level_set( TAG, ESP_LOG_DEBUG );
 
@@ -353,17 +347,9 @@ BaseType_t mqtt_task_start( QueueHandle_t from_decoder, QueueHandle_t to_oled )
         return pdFALSE;
     }
 
-    mqtt_handler_ctx_t *ctx = malloc( sizeof(mqtt_handler_ctx_t) );
-    if( ctx == NULL)
-    {
-        ESP_LOGE( TAG, "malloc( mqtt_handler_ctx ) failed");
-        return pdFALSE;
-    }
-    ctx->to_oled = to_oled;
-
     esp_err_t err;
     /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
-    err = esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, ctx );
+    err = esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL );
     if( err != ESP_OK ) {
         ESP_LOGE( TAG, "esp_mqtt_client_register_event() erreur %d", err);
         return pdFALSE;

@@ -14,4 +14,4 @@
 
 typedef int mqtt_error_t;
 
-BaseType_t mqtt_task_start( QueueHandle_t from_decoder, QueueHandle_t to_oled );
+BaseType_t mqtt_task_start( QueueHandle_t from_decoder );

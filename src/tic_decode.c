@@ -32,7 +32,6 @@ typedef struct tic_taskdecode_params_s {
     StreamBufferHandle_t from_uart;
     QueueHandle_t to_mqtt;
     EventGroupHandle_t to_ticled;
-    QueueHandle_t to_oled;
 } tic_taskdecode_params_t;
 
 /***
@@ -59,11 +58,6 @@ typedef struct tic_decoder_s {
 
     // event_groups pour faire clignoter la Led
     EventGroupHandle_t to_ticled;
-
-    // queue pour envoyer les trames completes au client mqtt
-    QueueHandle_t to_oled;
-
-
 } tic_decoder_t;
 
 
@@ -183,7 +177,6 @@ static void reset_decoder( tic_decoder_t *td )
     // membres conservés
     QueueHandle_t to_mqtt = td->to_mqtt;
     EventGroupHandle_t to_ticled = td->to_ticled;
-    QueueHandle_t to_oled = td->to_oled;
 
     // desalloue les datasets
     tic_dataset_free( td->datasets );
@@ -194,7 +187,6 @@ static void reset_decoder( tic_decoder_t *td )
     // restaure les membres conservés
     td->to_mqtt = to_mqtt;
     td->to_ticled = to_ticled;
-    td->to_oled = to_oled;
 }
 
 
@@ -241,7 +233,7 @@ static tic_error_t affiche_dataset( tic_decoder_t *td, const tic_dataset_t *ds )
     {
        // oled_update( td->to_oled, DISPLAY_PAPP, ds->valeur );
         uint32_t papp = strtol( ds->valeur, NULL, 10 );
-        void status_papp_update( int papp );
+        status_papp_update( papp );
     }
     //ESP_LOGD ( TAG, "%s %s", ds->etiquette, ds->valeur);
     return TIC_OK;
@@ -478,7 +470,6 @@ void tic_decode_task( void *pvParams )
     tic_decoder_t td = {
         .to_mqtt = params->to_mqtt,
         .to_ticled = params->to_ticled,
-        .to_oled = params->to_oled
     };
 
     // buffer pour recevoir les données de la tache uart_events
@@ -508,7 +499,6 @@ void tic_decode_task( void *pvParams )
   */
 void tic_decode_start_task( StreamBufferHandle_t from_uart, QueueHandle_t mqtt_queue, EventGroupHandle_t to_ticled, QueueHandle_t to_oled )
 {
-
     esp_log_level_set( TAG, ESP_LOG_DEBUG );
 
     tic_taskdecode_params_t *tic_task_params = malloc( sizeof(tic_taskdecode_params_t) );
@@ -521,6 +511,5 @@ void tic_decode_start_task( StreamBufferHandle_t from_uart, QueueHandle_t mqtt_q
     tic_task_params->from_uart = from_uart;
     tic_task_params->to_mqtt = mqtt_queue;
     tic_task_params->to_ticled = to_ticled;
-    tic_task_params->to_oled = to_oled;
     xTaskCreate(tic_decode_task, "tic_decode_task", 4096, (void *)tic_task_params, 12, NULL);
 }

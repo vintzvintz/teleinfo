@@ -154,9 +154,9 @@ void status_clock_update( const char* time_str)
 }
 
 
-void status_papp_update( int papp )
+void status_papp_update( uint32_t papp )
 {
     char buf[16];
     snprintf( buf, sizeof(buf), "%d W", papp );
-    oled_update( s_to_oled, DISPLAY_CLOCK, buf );
+    oled_update( s_to_oled, DISPLAY_PAPP, buf );
 }
