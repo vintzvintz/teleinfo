@@ -32,5 +32,8 @@ void status_wifi_lost_ip();
 // pour notifier l'état du client MQTT
 void status_mqtt_update( const char *status );
 
+// pour afficher la puissance apparente instantanée
+void status_papp_update( int papp );
+
 // affiche l'heure courante
 void status_clock_update( const char *now );

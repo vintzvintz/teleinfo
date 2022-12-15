@@ -9,7 +9,6 @@
 
 #include "tic_decode.h"
 #include "status.h"
-#include "oled.h"
 #include "ticled.h"
 
 static const char *TAG = "tic_decode";
@@ -121,28 +120,6 @@ void tic_dataset_free( tic_dataset_t *ds )
     }
 }
 
-/*
-static int my_strcmp( const char * s1, const char *s2 )
-{
-    int ret = strcmp( s1, s2 );
-    ESP_LOGD( TAG, "strcmp( %s, %s ) = %d",s1,s2,ret);
-    return ret;
-}
-
-
-static void debug_list( const char *nom, tic_dataset_t *ds )
-{
-    char buf[256];
-    int pos = 0;
-    pos += snprintf( buf, sizeof(buf), "%s = ", nom );
-    while( ds != NULL )
-    {
-        pos += snprintf( &buf[pos], sizeof(buf), "%s->", ds->etiquette );
-        ds = ds->next;
-    }
-    ESP_LOGD( TAG, "%s", buf);
-}
-*/
 
 static tic_dataset_t* insert_sort( tic_dataset_t *sorted, tic_dataset_t *ds)
 {
@@ -153,34 +130,18 @@ static tic_dataset_t* insert_sort( tic_dataset_t *sorted, tic_dataset_t *ds)
 
     while( item != NULL )
     {
-        //ESP_LOGD( TAG, "essaye d'inserer %s sur %s", ds->etiquette, item->etiquette );
-
         if( strcmp( ds->etiquette, item->etiquette ) < 0 )
         {
-            // ds est plus petit que l'élément courant
+            // ds est plus petit que l'élément courant,
             assert( item == sorted ); // impossible sauf pour le premier element de la liste triée
-            //ESP_LOGD( TAG, "insere %s avant %s (en premier)", ds->etiquette, item->etiquette );
-            ds->next = item;
+            ds->next = item;          //  insere avant
             sorted = ds;
             break;
         }
-        // ds est plus grand que l'élément courant
-        // on l'insère dans la liste si 
-        //    s'il est plus petit que l'élément suivant,
-        //    ou s'il n'y a pas d'élement suivant 
         if ( (item->next == NULL) || (strcmp( ds->etiquette, item->next->etiquette ) <= 0 ) )
         {
-            /*
-            if( item->next == NULL )
-            {
-                ESP_LOGD( TAG, "insere %s après %s (en dernier)", ds->etiquette, item->etiquette );
-            }
-            else
-            {
-                ESP_LOGD( TAG, "insere %s après %s et avant %s", ds->etiquette, item->etiquette, item->next->etiquette );
-            }
-            */
-            ds->next = item->next;
+            // ds est plus petit que l'élément suivant (ou pas d'élement suivant)
+            ds->next = item->next;    // insere après
             item->next = ds;
             break;
         }
@@ -192,9 +153,7 @@ static tic_dataset_t* insert_sort( tic_dataset_t *sorted, tic_dataset_t *ds)
         //ESP_LOGD( TAG, "la liste triée est vide, renvoie %s", ds->etiquette );
         sorted = ds;
     }
-
     return sorted;
-
 }
 
 
@@ -203,18 +162,13 @@ tic_dataset_t * tic_dataset_sort(tic_dataset_t *ds)
     tic_dataset_t * sorted = NULL;
     tic_dataset_t * ds_next = NULL;
 
-
     while( ds != NULL )
     {
-        //ESP_LOGD( TAG, "tic_dataset_sort(%s)", ds->etiquette );
-        //debug_list("ds", ds);
-
         // copie le ptr vers l'item suivant car ds->next va être modifié lors de son insertion dans 'sorted'
         ds_next = ds->next;
         ds->next=NULL;
 
         sorted = insert_sort( sorted, ds );
-        //debug_list( "sorted", sorted);
         ds = ds_next;
     }
     return sorted;
@@ -285,7 +239,9 @@ static tic_error_t affiche_dataset( tic_decoder_t *td, const tic_dataset_t *ds )
 {
     if( strcmp( ds->etiquette, "PAPP" ) == 0 )
     {
-       oled_update( td->to_oled, DISPLAY_PAPP, ds->valeur );
+       // oled_update( td->to_oled, DISPLAY_PAPP, ds->valeur );
+        uint32_t papp = strtol( ds->valeur, NULL, 10 );
+        void status_papp_update( int papp );
     }
     //ESP_LOGD ( TAG, "%s %s", ds->etiquette, ds->valeur);
     return TIC_OK;
@@ -351,8 +307,9 @@ static tic_error_t dataset_end( tic_decoder_t *td ) {
     }
     
     // ajoute le nouveau dataset à la liste
-    ds->next = td->datasets;
-    td->datasets = ds;
+    //ds->next = td->datasets;
+    //td->datasets = ds;
+    td->datasets = insert_sort( td->datasets, ds );
 
     // mise à jour afficheur oled
     affiche_dataset( td, ds );
@@ -366,31 +323,26 @@ static tic_error_t frame_start( tic_decoder_t *td )
     //ESP_LOGD( TAG, "frame_start()" );
     if( td->datasets != NULL || td->stx_received != 0 )
     {
-        ESP_LOGE( TAG, "Trame invalide : STX reçu avant ETX sur la trame courante" );
+        ESP_LOGE( TAG, "Trame incomplète : STX reçu avant ETX" );
         return TIC_ERR_INVALID_CHAR;
     }
     td->stx_received = 1;
     // todo -> creer un tache de surveillance de la memoire, ou tester les outils d'analyse ESP
-    //ESP_LOGD( TAG, "Free memory: %d bytes", esp_get_free_heap_size());
+    ESP_LOGD( TAG, "Free memory: %d bytes", esp_get_free_heap_size());
     return TIC_OK;
 }
 
 
 static tic_error_t frame_end( tic_decoder_t *td )
 {
+    //td->datasets = tic_dataset_sort( td->datasets );
+
     // monitoring sur la console serie
-    ESP_LOGD( TAG, "Avant tri" );
     tic_dataset_print( td->datasets );
-
-    td->datasets = tic_dataset_sort( td->datasets );
-    ESP_LOGD( TAG, "Après tri" );
-    tic_dataset_print( td->datasets );
-
 
     // signale la réception de données UART
     status_rcv_tic_frame( 0 );
-    
- 
+
     //uint32_t nb = tic_dataset_count( td->datasets );
     //uint32_t size = tic_dataset_size( td->datasets );
     //ESP_LOGI( TAG, "Trame de %d datasets %d bytes (%p)", nb, size, td->datasets );
