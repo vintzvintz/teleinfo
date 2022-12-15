@@ -41,7 +41,6 @@ const size_t NUMERIC_DATA_COUNT = sizeof(NUMERIC_DATA) / sizeof(NUMERIC_DATA[0])
 
 typedef struct mqtt_task_param_s {
     QueueHandle_t from_decoder;
-    QueueHandle_t to_oled;
     esp_mqtt_client_handle_t esp_client;
 } mqtt_task_param_t;
 
@@ -153,25 +152,17 @@ static size_t printf_ds( char *buf, size_t size, const tic_dataset_t *ds )
         // formatte la valeur numerique avec ou sans horodate
         uint32_t val = strtol( ds->valeur, NULL, 10 );
         if( ds->horodate[0] == '\0' )
-        {
             return snprintf( buf, size, FORMAT_NUMERIC_SANS_HORODATE, ds->etiquette, val);
-        }
         else
-        {
             return snprintf( buf, size, FORMAT_NUMERIC_AVEC_HORODATE, ds->etiquette, ds->horodate, val );
-        }
     }
     else
     {
         // formatte la valeur texte avec ou sans horodate
         if( ds->horodate[0] == '\0' )
-        {
             return snprintf( buf, size, FORMAT_STRING_SANS_HORODATE, ds->etiquette, ds->valeur);
-        }
         else
-        {
             return snprintf( buf, size, FORMAT_STRING_AVEC_HORODATE, ds->etiquette, ds->horodate, ds->valeur );
-        }
     }
 }
 
@@ -230,7 +221,7 @@ int compare_datasets( const tic_dataset_t *ds1, const tic_dataset_t *ds2 )
         ds1 = ds1->next;
         ds2 = ds2->next;
     }
-    // nombre de datasets différents ?
+    // nombre de datasets différents
     if( (ds1!=NULL) || (ds2!=NULL) )
         return -1;
 
@@ -258,20 +249,19 @@ static mqtt_error_t datasets_to_json( char *buf, size_t size, const tic_dataset_
 
         // formatte la donnée en JSON
         pos += printf_ds( &(buf[pos]), size-pos, ds );
+
+        // separateurs
         if( pos >= (size-2) )     // -2 pour la virgule et le \n 
         {
             ESP_LOGE( TAG, "JSON buffer overflow" );
             return MQTT_ERR_OVERFLOW;
         }
-
-        // separation entre les données publiées
         if( ds->next != NULL) 
         {
             buf[pos++] = ',';
         }
         buf[pos++] = '\n';
 
-        // donnée suivante
         ds = ds->next;
     }
 
@@ -379,11 +369,9 @@ BaseType_t mqtt_task_start( QueueHandle_t from_decoder, QueueHandle_t to_oled )
         return pdFALSE;
     }
 
-
     // setup inter-task communication stuff
     mqtt_task_param_t *task_params = malloc( sizeof( mqtt_task_param_t ) );
     task_params->from_decoder = from_decoder;
-    task_params->to_oled = to_oled;
     task_params->esp_client = client;
 
     // create mqtt client task
