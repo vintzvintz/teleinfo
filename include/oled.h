@@ -10,8 +10,7 @@ extern "C" {
 
 
 typedef enum display_event_type_e {
-    DISPLAY_UART_STATUS = 0,
-    DISPLAY_TIC_STATUS,
+    DISPLAY_TIC_STATUS =0,
     DISPLAY_WIFI_STATUS,
     DISPLAY_IP_ADDR,
     DISPLAY_MQTT_STATUS,

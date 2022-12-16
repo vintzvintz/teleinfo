@@ -141,7 +141,6 @@ TicDisplay::TicDisplay( int8_t rstPin, const SPlatformI2cConfig &config )
     const uint32_t w = 128 / m_font_width;
     uint8_t i = 0;
     m_lines[DISPLAY_CLOCK] = new DisplayLine( LABEL_CLOCK, i++, w );
-    m_lines[DISPLAY_UART_STATUS] = new DisplayLine( LABEL_UART, i++, w );
     m_lines[DISPLAY_TIC_STATUS] = new DisplayLine( LABEL_TIC, i++, w );
     m_lines[DISPLAY_WIFI_STATUS] = new DisplayLine( LABEL_WIFI, i++, w);
     m_lines[DISPLAY_IP_ADDR] = new DisplayLine( LABEL_IP_ADDR, i++, w );
