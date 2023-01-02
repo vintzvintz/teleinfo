@@ -29,14 +29,18 @@ static const char *TAG = "mqtt_task";
 
 #define TIC_BROKER_URL CONFIG_TIC_BROKER_URL
 
+
 // données à publier 
-const char *PUBLISHED_DATA[] = { "ADCO", "IINST", "PTEC", "BASE", "HCHC", "HCHP", "PAPP" };
+const char *PUBLISHED_DATA[] = { "IINST", "PTEC", "BASE", "HCHC", "HCHP", "PAPP" };
 const size_t PUBLISEHD_DATA_COUNT = sizeof(PUBLISHED_DATA) / sizeof(PUBLISHED_DATA[0]);
 
 // données de type numerique
 // TODO : detection automatique avec strtol
 const char *NUMERIC_DATA[] = { "IINST", "BASE", "HCHC", "HCHP", "PAPP" };
 const size_t NUMERIC_DATA_COUNT = sizeof(NUMERIC_DATA) / sizeof(NUMERIC_DATA[0]);
+
+// identifiant du compteur
+static const char *LABEL_ADCO = "ADCO";
 
 
 typedef struct mqtt_task_param_s {
@@ -133,11 +137,15 @@ static int is_integer( const tic_dataset_t *ds )
 }
 
 
-static const char *FORMAT_STRING_SANS_HORODATE = "  {\"lbl\": \"%s\", \"val\": \"%s\" }";
-static const char *FORMAT_STRING_AVEC_HORODATE = "  {\"lbl\": \"%s\", \"ts\": \"%s\", \"val\": \"%s\" }";
-static const char *FORMAT_NUMERIC_SANS_HORODATE = "  {\"lbl\": \"%s\", \"val\": %d }";
-static const char *FORMAT_NUMERIC_AVEC_HORODATE = "  {\"lbl\": \"%s\", \"ts\": \"%s\", \"val\": %d }";
+//static const char *FORMAT_STRING_SANS_HORODATE = "  {\"lbl\": \"%s\", \"val\": \"%s\" }";
+//static const char *FORMAT_STRING_AVEC_HORODATE = "  {\"lbl\": \"%s\", \"ts\": \"%s\", \"val\": \"%s\" }";
+//static const char *FORMAT_NUMERIC_SANS_HORODATE = "  {\"lbl\": \"%s\", \"val\": %d }";
+//static const char *FORMAT_NUMERIC_AVEC_HORODATE = "  {\"lbl\": \"%s\", \"ts\": \"%s\", \"val\": %d }";
 static const char *FORMAT_ISO8601 = "%Y-%m-%dT%H:%M:%S%z";
+
+static const char *FORMAT_STRING_SANS_HORODATE = "  \"%s\" : { \"val\":\"%s\" }";
+static const char *FORMAT_NUMERIC_SANS_HORODATE = "  \"%s\" : { \"val\":%d }";
+
 
 static size_t printf_ds( char *buf, size_t size, const tic_dataset_t *ds )
 {
@@ -147,17 +155,21 @@ static size_t printf_ds( char *buf, size_t size, const tic_dataset_t *ds )
         uint32_t val = strtol( ds->valeur, NULL, 10 );
         if( ds->horodate[0] == '\0' )
             return snprintf( buf, size, FORMAT_NUMERIC_SANS_HORODATE, ds->etiquette, val);
-        else
+/*        else
             return snprintf( buf, size, FORMAT_NUMERIC_AVEC_HORODATE, ds->etiquette, ds->horodate, val );
+*/
     }
     else
     {
         // formatte la valeur texte avec ou sans horodate
         if( ds->horodate[0] == '\0' )
             return snprintf( buf, size, FORMAT_STRING_SANS_HORODATE, ds->etiquette, ds->valeur);
+/*
         else
             return snprintf( buf, size, FORMAT_STRING_AVEC_HORODATE, ds->etiquette, ds->horodate, ds->valeur );
+*/
     }
+    return 0;
 }
 
 
@@ -222,6 +234,24 @@ int compare_datasets( const tic_dataset_t *ds1, const tic_dataset_t *ds2 )
     return 0;
 }
 
+
+static mqtt_error_t datasets_to_topic (char *buf, size_t size, const tic_dataset_t *ds )
+{
+    while( ds != NULL )
+    {
+        if( strncmp( ds->etiquette, LABEL_ADCO, sizeof(*LABEL_ADCO) ) == 0)
+        {
+            snprintf( buf, size, MQTT_TOPIC_FORMAT, ds->valeur );
+            ESP_LOGI( TAG , "Topic=%s", buf );
+            return MQTT_OK;
+        }
+        ds = ds->next;
+    }
+    ESP_LOGE( TAG, "ADCO (identifiant compteur) absent");
+    return MQTT_ERR_MISSING_DATA;
+}
+
+
 static mqtt_error_t datasets_to_json( char *buf, size_t size, const tic_dataset_t *ds )
 {
     size_t pos = 0;
@@ -229,7 +259,7 @@ static mqtt_error_t datasets_to_json( char *buf, size_t size, const tic_dataset_
     char time_buf[30];
     get_time_iso8601( time_buf, sizeof(time_buf) );
 
-    pos += snprintf( &(buf[pos]), size-pos, "{  \"horodate\" : \"%s\",\n  \"tic_frame\" : [\n", time_buf );
+    pos += snprintf( &(buf[pos]), size-pos, "{  \"horodate\" : \"%s\",\n  \"tic\" : {\n", time_buf );
 
     while( ds!=NULL && (size-pos) > 0 )
     {
@@ -260,7 +290,7 @@ static mqtt_error_t datasets_to_json( char *buf, size_t size, const tic_dataset_
     }
 
     // termine le tableau et l'objet JSON racine
-    pos += snprintf( &(buf[pos]), size-pos, "] }\n" );
+    pos += snprintf( &(buf[pos]), size-pos, "} }\n" );
     if( pos > (size-1) )
     {
         ESP_LOGE( TAG, "JSON buffer overflow" );
@@ -284,6 +314,8 @@ void mqtt_task( void *pvParams )
     }
 
     char *json_buffer = malloc(MQTT_JSON_BUFFER_SIZE);
+    char *topic_buffer = malloc(MQTT_TOPIC_BUFFER_SIZE);
+
     TickType_t max_ticks = MQTT_TIC_TIMEOUT_SEC * 1000 / portTICK_PERIOD_MS; 
     tic_dataset_t *ds_last = NULL; 
     tic_dataset_t *ds_new = NULL;
@@ -298,6 +330,12 @@ void mqtt_task( void *pvParams )
             ESP_LOGI( TAG, "Aucune trame téléinfo reçue depuis %d secondes (%p)", MQTT_TIC_TIMEOUT_SEC, ds_new );
             continue;
         }
+
+        if( datasets_to_topic (topic_buffer, MQTT_TOPIC_BUFFER_SIZE, ds_new ) != MQTT_OK )
+        {
+            continue;
+        }
+
         ds_new = filtre_datasets( ds_new );
 
         if( compare_datasets( ds_last, ds_new ) != 0 )
@@ -318,7 +356,7 @@ void mqtt_task( void *pvParams )
             continue;
         }
 
-        int msg_id = esp_mqtt_client_publish( params->esp_client, "/linky/pouet", json_buffer, 0, 0, 0);
+        int msg_id = esp_mqtt_client_publish( params->esp_client, topic_buffer, json_buffer, 0, 0, 0);
         if( msg_id < 0 )
         {
             //ESP_LOGE( TAG, "Echec de la publication mqtt");
@@ -326,7 +364,14 @@ void mqtt_task( void *pvParams )
     }
 
     ESP_LOGE( TAG, "fatal: mqtt_task exited" );
-    free(json_buffer);
+    if( json_buffer != NULL ) {
+        free(json_buffer);
+        json_buffer = NULL;
+    }
+    if( topic_buffer != NULL ) {
+        free(topic_buffer);
+        topic_buffer = NULL;
+    }
     esp_mqtt_client_destroy( params->esp_client );
     vTaskDelete(NULL);
 }
