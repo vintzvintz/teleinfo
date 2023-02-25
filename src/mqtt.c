@@ -36,7 +36,7 @@ const size_t PUBLISEHD_DATA_COUNT = sizeof(PUBLISHED_DATA) / sizeof(PUBLISHED_DA
 
 // données de type numerique
 // TODO : detection automatique avec strtol
-const char *NUMERIC_DATA[] = { "IINST", "BASE", "HCHC", "HCHP", "PAPP" };
+const char *NUMERIC_DATA[] = { "IINST", "BASE", "HCHC", "HCHP", "PAPP", "IMAX", "ISOUSC" };
 const size_t NUMERIC_DATA_COUNT = sizeof(NUMERIC_DATA) / sizeof(NUMERIC_DATA[0]);
 
 // identifiant du compteur
@@ -128,7 +128,8 @@ static int find_label_in_list( const char *label, const char *list[], size_t nb 
 
 static int is_published( const tic_dataset_t *ds )
 {
-    return find_label_in_list( ds->etiquette, PUBLISHED_DATA, PUBLISEHD_DATA_COUNT ) >= 0;
+    return true;
+    //return find_label_in_list( ds->etiquette, PUBLISHED_DATA, PUBLISEHD_DATA_COUNT ) >= 0;
 }
 
 static int is_integer( const tic_dataset_t *ds )
