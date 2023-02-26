@@ -12,6 +12,8 @@
 #include "lcdgfx_gui.h"
 
 #include "oled.h"
+#include "pinout.h"
+
 #include "tic_decode.h"
 
 

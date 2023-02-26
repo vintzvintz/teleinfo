@@ -12,7 +12,7 @@
 #include "lcdgfx.h"
 #include "lcdgfx_gui.h"
 
-
+#include "pinout.h"
 #include "oled.h"
 
 

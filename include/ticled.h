@@ -1,9 +1,4 @@
 /*
- *    Affection des GPIO
- */
-#define TIC_GPIO_LED  GPIO_NUM_4
-
-/*
  * Durée des clingotements
  */
 #define TIC_BLINK_COURT   25         // ms
