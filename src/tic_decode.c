@@ -5,6 +5,7 @@
 #include "freertos/event_groups.h"
 #include "freertos/stream_buffer.h"
 #include "esp_log.h"
+#include "esp_netif.h"
 #include "mqtt_client.h"
 
 #include "tic_decode.h"
@@ -279,7 +280,7 @@ static tic_error_t dataset_end( tic_decoder_t *td ) {
     tic_char_t checksum = ( s1 & 0x3F ) + 0x20;   // voir doc linky enedis 
     if ( checksum != buf_checksum[0] )
     {
-        ESP_LOGE( TAG, "Checksum incorrect pour %s. attendu=%#x calculé=%#x  (s1=%#x)", buf_etiquette, buf_checksum[0], checksum, s1 );
+        ESP_LOGE( TAG, "Checksum incorrect pour %s. attendu=%#x calculé=%#x  (s1=%#lx)", buf_etiquette, buf_checksum[0], checksum, s1 );
         return TIC_ERR_CHECKSUM;
     }
 
@@ -320,7 +321,7 @@ static tic_error_t frame_start( tic_decoder_t *td )
     }
     td->stx_received = 1;
     // todo -> creer un tache de surveillance de la memoire, ou tester les outils d'analyse ESP
-    ESP_LOGD( TAG, "Free memory: %d bytes", esp_get_free_heap_size());
+    ESP_LOGD( TAG, "Free memory: %lu bytes", esp_get_free_heap_size());
     return TIC_OK;
 }
 
@@ -487,7 +488,7 @@ void tic_decode_task( void *pvParams )
         err = process_raw_data( &td, rx_buf, n );
         if( err != TIC_OK )
         {
-            ESP_LOGE(TAG, "tic decoder error %#0x", err);
+            ESP_LOGE(TAG, "tic decoder error %#0lx", err);
             reset_decoder( &td );
         }
     }

@@ -120,7 +120,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         break;
 
     default:
-        ESP_LOGD( TAG, "WIFI_EVENT id=%#x", event_id );
+        ESP_LOGD( TAG, "WIFI_EVENT id=%#lx", event_id );
     }
 }
 
@@ -145,7 +145,7 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
         break;
 
     default:
-        ESP_LOGD( TAG, "IP_EVENT id=%#x", event_id );
+        ESP_LOGD( TAG, "IP_EVENT id=%#lx", event_id );
     }
 }
 

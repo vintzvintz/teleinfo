@@ -68,7 +68,7 @@ static void log_error_if_nonzero(const char *message, int error_code)
  */
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
-    ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%d", base, event_id);
+    ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%ld", base, event_id);
     esp_mqtt_event_handle_t event = event_data;
 
     switch ((esp_mqtt_event_id_t)event_id) {
@@ -383,7 +383,7 @@ BaseType_t mqtt_task_start( QueueHandle_t from_decoder )
    esp_log_level_set( TAG, ESP_LOG_DEBUG );
 
    esp_mqtt_client_config_t mqtt_cfg = {
-        .uri = TIC_BROKER_URL
+        .broker.address.uri = TIC_BROKER_URL
     };
 
     esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqtt_cfg);

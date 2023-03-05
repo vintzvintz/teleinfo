@@ -40,7 +40,7 @@ static void uart_task(void *pvParameters)
 
     for(;;) {
         //Waiting for UART event.
-        if(xQueueReceive(uart1_queue, (void * )&event, (portTickType)portMAX_DELAY)) {
+        if(xQueueReceive(uart1_queue, (void * )&event, portMAX_DELAY)) {
             memset(dtmp, 0, RD_BUF_SIZE);
 
             switch(event.type) {

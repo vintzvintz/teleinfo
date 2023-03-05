@@ -15,9 +15,8 @@
 #include "mqtt_client.h"
 #include "nvs_flash.h"
 #include "esp_log.h"
-
-
-#include "sntp.h"
+#include "esp_netif.h"
+#include "esp_sntp.h"
 
 #include "tic_decode.h"
 #include "uart_events.h"
@@ -59,7 +58,7 @@ void app_main(void)
 
 
     ESP_LOGI(TAG, "[APP] Startup..");
-    ESP_LOGI(TAG, "[APP] Free memory: %d bytes", esp_get_free_heap_size());
+    ESP_LOGI(TAG, "[APP] Free memory: %lu bytes", esp_get_free_heap_size());
     ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
 
     // transfere le flux de données brutes depuis l'UART vers le decodeur
