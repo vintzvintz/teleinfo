@@ -3,6 +3,7 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
-sdkconfig.esp32-s3-devkitc-1.old
+sdkconfig.*.old
 .vscode/settings.json
 teleinfo.code-workspace
+compile_commands.json
