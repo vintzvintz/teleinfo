@@ -11,6 +11,9 @@
 #include "esp_netif.h"
 #include "esp_log.h"
 
+/* Intellisense bullshit */
+#undef __linux__
+
 // lwIP component
 #include "esp_sntp.h"
 

@@ -1,6 +1,7 @@
 
 
-
+/* Intellisense bullshit */
+#undef __linux__
 
 #define LWIP_DEBUG 1
 

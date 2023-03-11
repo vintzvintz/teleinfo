@@ -1,3 +1,5 @@
+/* Intellisense bullshit */
+#undef __linux__
 
 #include <stdio.h>
 #include <stdint.h>
