@@ -12,7 +12,8 @@ set(srcs
     "tic_decode.c"
     "ticled.c"
     "uart_events.c"
-    "wifi.c"     )
+    "wifi.c"
+    "bouton.c"     )
 
 idf_component_register( SRCS ${srcs} 
                         REQUIRES

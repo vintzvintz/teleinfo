@@ -27,6 +27,7 @@
 #include "ticled.h"
 #include "clock.h"
 #include "status.h"
+#include "bouton.h"
 
 
 
@@ -98,11 +99,13 @@ void app_main(void)
     nvs_initialise();    // required for wifi driver
     wifi_task_start( );
 
-    oled_task_start( to_oled );
-    ticled_start_task( to_ticled );
+    start_bouton_task();
+
+//    oled_task_start( to_oled );
+//    ticled_start_task( to_ticled );
 
     uart_task_start( to_decoder );
     tic_decode_start_task( to_decoder, to_mqtt, to_ticled, to_oled );
-    mqtt_task_start( to_mqtt );
-    clock_task_start( );
+//    mqtt_task_start( to_mqtt );
+//    clock_task_start( );
 }

@@ -9,6 +9,9 @@
 #define OLED_GPIO_SDA    GPIO_NUM_1
 #define OLED_I2C_ADDRESS 0x3C
 
+/* provisionning wifi */
+#define GPIO_WIFI_PROVIVISIONING_PIN   GPIO_NUM_9
+
 /* oled avec  devkit S3 (cramée)
 #define OLED_GPIO_RST    -1
 #define OLED_GPIO_SCL    GPIO_NUM_5
