@@ -13,6 +13,10 @@
 #define MQTT_JSON_BUFFER_SIZE 1500
 #define MQTT_TIC_TIMEOUT_SEC 10
 
+#define BROKER_HOST   "teleinfo.vintz.fr"
+#define BROKER_PORT   8883
+#define PSK_IDENTITY  "vintz"
+#define PSK_KEY       {0x51, 0x51, 0x51, 0x51}
 
 
 typedef int mqtt_error_t;

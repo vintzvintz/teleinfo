@@ -17,6 +17,7 @@
 #include "freertos/event_groups.h"
 
 #include "esp_log.h"
+#include "esp_tls.h"
 #include "mqtt_client.h"
 
 #include "lwip/sockets.h"
@@ -28,8 +29,6 @@
 #include "mqtt.h"
 
 static const char *TAG = "mqtt_task";
-
-#define TIC_BROKER_URL CONFIG_TIC_BROKER_URL
 
 
 // données à publier 
@@ -70,7 +69,7 @@ static void log_error_if_nonzero(const char *message, int error_code)
  */
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
-    ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%ld", base, event_id);
+    //ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%ld", base, event_id);
     esp_mqtt_event_handle_t event = event_data;
 
     switch ((esp_mqtt_event_id_t)event_id) {
@@ -379,15 +378,46 @@ void mqtt_task( void *pvParams )
     vTaskDelete(NULL);
 }
 
+static const uint8_t psk_key[] = PSK_KEY ;
+
+static const psk_hint_key_t psk_hint_key = {
+        .key = psk_key,
+        .key_size = sizeof(psk_key),
+        .hint = PSK_IDENTITY
+    };
+
+static void log_mqtt_cfg( esp_mqtt_client_config_t cfg )
+{
+    ESP_LOGI( TAG, "mqtt_broker_hostname: %s", cfg.broker.address.hostname );
+    ESP_LOGI( TAG, "mqtt_broker_port: %"PRIi32, cfg.broker.address.port );
+    ESP_LOGI( TAG, "mqtt_broker_transport: %d", cfg.broker.address.transport );
+    ESP_LOGI( TAG, "mqtt_psk_identity: %s", cfg.broker.verification.psk_hint_key->hint );
+    ESP_LOGI( TAG, "mqtt_psk_key_size: %d", cfg.broker.verification.psk_hint_key->key_size );
+    for( int i=0;  i < cfg.broker.verification.psk_hint_key->key_size; i++ )
+    {
+        ESP_LOGI( TAG, "mqtt_psk_key[%d]: %#x", i, cfg.broker.verification.psk_hint_key->key[i] );
+    }
+}
+
 
 BaseType_t mqtt_task_start( QueueHandle_t from_decoder )
 {
-   esp_log_level_set( TAG, ESP_LOG_DEBUG );
+    //esp_log_level_set("*", ESP_LOG_INFO);
+    esp_log_level_set( TAG, ESP_LOG_DEBUG );
+    //esp_log_level_set("MQTT_CLIENT", ESP_LOG_VERBOSE);
+    //esp_log_level_set("TRANSPORT_BASE", ESP_LOG_VERBOSE);
+    //esp_log_level_set("esp-tls", ESP_LOG_VERBOSE);
+    //esp_log_level_set("TRANSPORT", ESP_LOG_VERBOSE);
+    //esp_log_level_set("OUTBOX", ESP_LOG_VERBOSE);
 
    esp_mqtt_client_config_t mqtt_cfg = {
-        .broker.address.uri = TIC_BROKER_URL
+        .broker.address.hostname = BROKER_HOST,
+        .broker.address.port = BROKER_PORT,
+        .broker.address.transport = MQTT_TRANSPORT_OVER_SSL,
+        .broker.verification.psk_hint_key = &psk_hint_key,
     };
 
+    debug_mqtt_cfg( mqtt_cfg );
     esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqtt_cfg);
     if( client == NULL )
     {

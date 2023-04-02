@@ -101,11 +101,11 @@ void app_main(void)
 
     start_bouton_task();
 
-//    oled_task_start( to_oled );
-//    ticled_start_task( to_ticled );
+    oled_task_start( to_oled );
+    ticled_start_task( to_ticled );
 
     uart_task_start( to_decoder );
     tic_decode_start_task( to_decoder, to_mqtt, to_ticled, to_oled );
-//    mqtt_task_start( to_mqtt );
-//    clock_task_start( );
+    mqtt_task_start( to_mqtt );
+    clock_task_start( );
 }

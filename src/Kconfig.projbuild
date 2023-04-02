@@ -24,26 +24,4 @@ menu "Teleinfo Configuration"
             bool "WAPI PSK"
     endchoice
 
-    config TIC_BROKER_URL
-        string "MQTT broker URL"
-        default "mqtt://192.168.1.131"
-        help
-            URL of the broker to connect to
-
-    config TIC_BROKER_PSK_INDENITY
-        string "TLS-PSK identity"
-        default ""
-        help
-            Identite pour l'authentification PSK
-
-    config TIC_BROKER_PSK_KEY
-        string "TLS-PSK key"
-        default "{ 0x12, 0x34, 0x56 }"
-        help
-            Clé secrete l'authentification PSK au format C - exemple { 0x12, 0x34, 0x56 }
-
-    config TIC_BROKER_URL_FROM_STDIN
-        bool
-        default y if BROKER_URL = "FROM_STDIN"
-
 endmenu
