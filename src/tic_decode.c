@@ -9,6 +9,7 @@
 #include "mqtt_client.h"
 
 #include "tic_decode.h"
+#include "tic_flags.h"
 #include "status.h"
 #include "ticled.h"
 
@@ -19,12 +20,12 @@ static const char *TAG = "tic_decode";
 #define CHAR_CR   '\r'
 #define CHAR_LF   '\n'
 
-#define TIC_MODE_HISTORIQUE
+#define TIC_MODE_STANDARD 1
 
 // separateur dans un groupe de données
 #ifdef TIC_MODE_HISTORIQUE
     #define TIC_SEPARATOR  ' '    /* SPACE */
-#elif TIC_MODE_STANDARD
+#elif defined TIC_MODE_STANDARD
     #define TIC_SEPARATOR  0x09    /* TAB */
 #endif
 
@@ -86,20 +87,24 @@ uint32_t tic_dataset_size( tic_dataset_t *dataset )
     return size;
 }
 
-tic_error_t tic_dataset_print( tic_dataset_t *dataset )
+tic_error_t tic_dataset_print( tic_dataset_t *ds )
 {
     // ESP_LOGD( TAG, "print_datasets()");
-    while( dataset != NULL )
+    char flags_str[4];
+    while( ds != NULL )
     {
-        if( dataset->horodate[0] == '\0')
+        flags_str[0]= '.';
+        flags_str[1]= '.';
+        flags_str[2]= '.';
+        flags_str[3]=0;    // null-terminated
+        if( ds->flags & TIC_DS_PUBLISHED )
         {
-            ESP_LOGI( TAG, "%s\t%s", dataset->etiquette, dataset->valeur );
+            flags_str[0]= 'P';
+            flags_str[1]= ( ds->flags & TIC_DS_NUMERIQUE ) ? 'N' : 'T';
+            flags_str[2]= ( ds->flags & TIC_DS_HAS_TIMESTAMP ) ? 'h' : '.';
         }
-        else
-        {
-            ESP_LOGI( TAG, "%s\t%s\t%s", dataset->etiquette, dataset->horodate, dataset->valeur );
-        }
-        dataset = dataset->next;
+        ESP_LOGI( TAG, "%8.8s %s %s %s", ds->etiquette, flags_str, ds->horodate, ds->valeur );
+        ds = ds->next;
     }
     return TIC_OK;
 }
@@ -227,10 +232,12 @@ static void addbuf( uint32_t *s1, const tic_char_t *buf )
     }
 }
 
-
+// envoie, ou non, des donnes pour mettre à jour l'afficheur
 static tic_error_t affiche_dataset( tic_decoder_t *td, const tic_dataset_t *ds )
 {
-    if( strcmp( ds->etiquette, "PAPP" ) == 0 )
+    
+    //if( strcmp( ds->etiquette, "PAPP" ) == 0 )
+    if( strcmp( ds->etiquette, "SINST" ) == 0 )
     {
        // oled_update( td->to_oled, DISPLAY_PAPP, ds->valeur );
         uint32_t papp = strtol( ds->valeur, NULL, 10 );
@@ -240,6 +247,16 @@ static tic_error_t affiche_dataset( tic_decoder_t *td, const tic_dataset_t *ds )
     return TIC_OK;
 }
 
+/*
+static void tic_decoder_debug_state( const tic_decoder_t *td )
+{
+    ESP_LOGE( TAG, "cur_buf: %p", td->cur_buf );
+    ESP_LOGE( TAG, "buf0: [%s] (addr %p len %d)", td->buf0, td->buf0, strlen(td->buf0) );
+    ESP_LOGE( TAG, "buf1: [%s] (addr %p len %d)", td->buf1, td->buf1, strlen(td->buf1) );
+    ESP_LOGE( TAG, "buf2: [%s] (addr %p len %d)", td->buf2, td->buf2, strlen(td->buf2) );
+    ESP_LOGE( TAG, "buf3: [%s] (addr %p len %d)", td->buf3, td->buf3, strlen(td->buf3) );
+}
+*/
 
 static tic_error_t dataset_end( tic_decoder_t *td ) {
     //ESP_LOGD( TAG, "dataset_end()");
@@ -259,6 +276,13 @@ static tic_error_t dataset_end( tic_decoder_t *td ) {
         buf_horodate  = NULL;
         buf_valeur    = td->buf1;
         buf_checksum  = td->buf2;
+    }
+
+    // verifie que le checksum reçu est un caractere unique
+    size_t checksum_len = strlen(buf_checksum);
+    if( checksum_len != 1 )
+    {
+        ESP_LOGE( TAG, "Checksum reçu [%s] a une longueur %d differente de 1", buf_checksum, checksum_len );
     }
 
     // calcule le checksum
@@ -281,6 +305,7 @@ static tic_error_t dataset_end( tic_decoder_t *td ) {
     if ( checksum != buf_checksum[0] )
     {
         ESP_LOGE( TAG, "Checksum incorrect pour %s. attendu=%#x calculé=%#x  (s1=%#lx)", buf_etiquette, buf_checksum[0], checksum, s1 );
+        //tic_decoder_debug_state( td );
         return TIC_ERR_CHECKSUM;
     }
 
@@ -299,6 +324,18 @@ static tic_error_t dataset_end( tic_decoder_t *td ) {
         strncpy( ds->horodate, buf_horodate, TIC_SIZE_VALUE );
     }
     
+    // ajoute les flags
+    tic_dataset_flags_t flags;
+    if( tic_get_flags( ds->etiquette, &flags) == TIC_OK )
+    {
+        ds->flags = flags;
+    }
+    else
+    {
+        // Completer tic_flags.c si cette erreur se produit
+        ESP_LOGE( TAG, "Donnee %s inconnue diffusée par la TIC", ds->etiquette);
+    }
+
     // ajoute le nouveau dataset à la liste
     //ds->next = td->datasets;
     //td->datasets = ds;
@@ -394,7 +431,7 @@ static tic_error_t process_data( tic_decoder_t *td, const tic_char_t ch )
     size_t pos = strlen( td->cur_buf );
 
     // cas particulier pour le séparateur 
-    if ( ch == TIC_SEPARATOR && pos > 0)
+    if ( ch == TIC_SEPARATOR )
     {
         return process_separator( td, ch );
     }
@@ -407,6 +444,7 @@ static tic_error_t process_data( tic_decoder_t *td, const tic_char_t ch )
     else
     {
         ESP_LOGE( TAG, "tic_decoder_t overflow. Buffers trop petits (cur_buf_size=%d)", td->cur_buf_size );
+        //tic_decoder_debug_state( td );
         return TIC_ERR_OVERFLOW;
     }
 
@@ -422,7 +460,7 @@ static tic_error_t process_char( tic_decoder_t *td, const tic_char_t ch )  {
     // ignore toutes les données tant que STX n'est pas reçu
     if ( (ch != CHAR_STX) && (td->stx_received == 0) )
     {
-        ESP_LOGD( TAG, "Attente début de trame - caractère '%c' ignoré ", ch );
+        //ESP_LOGD( TAG, "Attente début de trame - caractère '%c' ignoré ", ch );
         return ret;
     }
 

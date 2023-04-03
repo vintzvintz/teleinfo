@@ -21,6 +21,27 @@ static const char *TAG = "uart_events";
 #define BUF_SIZE (512)
 #define RD_BUF_SIZE (BUF_SIZE)
 
+
+/*
+static const uart_config_t uart_config_mode_historique = {
+    .baud_rate = 1200,
+    .data_bits = UART_DATA_7_BITS,
+    .parity = UART_PARITY_EVEN,
+    .stop_bits = UART_STOP_BITS_1,
+    .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+    .source_clk = UART_SCLK_APB,
+};
+*/
+
+static const uart_config_t uart_config_mode_standard = {
+    .baud_rate = 9600,
+    .data_bits = UART_DATA_7_BITS,
+    .parity = UART_PARITY_EVEN,
+    .stop_bits = UART_STOP_BITS_1,
+    .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+    .source_clk = UART_SCLK_APB,
+};
+
 static QueueHandle_t uart1_queue;
 
 
@@ -49,7 +70,7 @@ static void uart_task(void *pvParameters)
                     ESP_LOGD(TAG, "[UART DATA]: %d bytes", event.size);
                     length_read = uart_read_bytes(UART_TELEINFO_NUM, dtmp, event.size, portMAX_DELAY);
                     xStreamBufferSend( task_params->to_decoder, dtmp, length_read, portMAX_DELAY);
-                    status_rcv_uart( TIC_MODE_HISTORIQUE, 0 );
+                    status_rcv_uart( TIC_MODE_STANDARD, 0 );
                     //printf("%s",dtmp);
                     break;
                 //Event of HW FIFO overflow detected
@@ -101,14 +122,6 @@ void uart_task_start( StreamBufferHandle_t streambuf_to_decoder )
 {
     /* Configure parameters of an UART driver,
      * communication pins and install the driver */
-    uart_config_t uart_config_mode_historique = {
-        .baud_rate = 1200,
-        .data_bits = UART_DATA_7_BITS,
-        .parity = UART_PARITY_EVEN,
-        .stop_bits = UART_STOP_BITS_1,
-        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-        .source_clk = UART_SCLK_APB,
-    };
 
     //Set UART log level
     esp_log_level_set(TAG, ESP_LOG_INFO);
@@ -116,7 +129,7 @@ void uart_task_start( StreamBufferHandle_t streambuf_to_decoder )
     //Install UART driver, and get the queue.
     ESP_LOGD( TAG, "uart_driver_install()" );
     uart_driver_install(UART_TELEINFO_NUM, BUF_SIZE * 2, BUF_SIZE * 2, 20, &uart1_queue, 0);
-    uart_param_config(UART_TELEINFO_NUM, &uart_config_mode_historique);
+    uart_param_config(UART_TELEINFO_NUM, &uart_config_mode_standard);
     uart_set_pin(UART_TELEINFO_NUM, UART_PIN_NO_CHANGE, UART_TELEINFO_SIGNAL_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     uart_set_rx_full_threshold( UART_TELEINFO_NUM, TIC_UART_THRESOLD);
 

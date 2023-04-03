@@ -1,4 +1,5 @@
 
+#pragma once
 
 // alias pour les tailles de buffers
 #define TIC_SIZE_BUF0 TIC_SIZE_ETIQUETTE
@@ -17,26 +18,29 @@
 #define TIC_ERR_OVERFLOW  4
 #define TIC_ERR_MEMORY 5
 #define TIC_ERR_QUEUEFULL 6
-
+#define TIC_ERR_UNKNOWN_DATA 7
 
 #define RX_BUF_SIZE 128
 
 typedef uint32_t tic_error_t;
 typedef char tic_char_t;
-
+typedef uint32_t tic_dataset_flags_t;
 /** 
  * tic_dataset_t est une liste de données décodées = contenu d'une trame complete
  */
 
 // taille des buffers
 #define TIC_SIZE_ETIQUETTE    16     // etiquette
-#define TIC_SIZE_VALUE        64     // donnée ou horodate
+#define TIC_SIZE_VALUE        128    // donnée ou horodate
 #define TIC_SIZE_CHECKSUM     4      // checksum
+
+
 
 typedef struct tic_dataset_s {
     tic_char_t etiquette[TIC_SIZE_ETIQUETTE];
     tic_char_t horodate[TIC_SIZE_VALUE];
     tic_char_t valeur[TIC_SIZE_VALUE];
+    tic_dataset_flags_t flags;
     struct tic_dataset_s *next;                    // linked_list
 } tic_dataset_t;
 
