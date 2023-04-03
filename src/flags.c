@@ -10,8 +10,8 @@
 
 #include <stdio.h>
 #include <string.h>
-#include "tic_decode.h"
-#include "tic_flags.h"
+#include "decode.h"
+#include "flags.h"
 
 #define TEXTE (TIC_DS_PUBLISHED)
 #define NUMERIQUE (TIC_DS_PUBLISHED|TIC_DS_NUMERIQUE)

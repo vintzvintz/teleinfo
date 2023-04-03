@@ -24,7 +24,8 @@
 #include "lwip/dns.h"
 #include "lwip/netdb.h"
 
-#include "tic_decode.h"
+#include "decode.h"
+#include "flags.h"
 #include "status.h"
 #include "mqtt.h"
 
@@ -32,16 +33,25 @@ static const char *TAG = "mqtt_task";
 
 
 // données à publier 
-const char *PUBLISHED_DATA[] = { "IINST", "PTEC", "BASE", "HCHC", "HCHP", "PAPP" };
-const size_t PUBLISEHD_DATA_COUNT = sizeof(PUBLISHED_DATA) / sizeof(PUBLISHED_DATA[0]);
+//const char *PUBLISHED_DATA[] = { "IINST", "PTEC", "BASE", "HCHC", "HCHP", "PAPP" };
+//const size_t PUBLISEHD_DATA_COUNT = sizeof(PUBLISHED_DATA) / sizeof(PUBLISHED_DATA[0]);
 
 // données de type numerique
-// TODO : detection automatique avec strtol
+/*
+
+// mode historique
 const char *NUMERIC_DATA[] = { "IINST", "BASE", "HCHC", "HCHP", "PAPP", "IMAX", "ISOUSC" };
-const size_t NUMERIC_DATA_COUNT = sizeof(NUMERIC_DATA) / sizeof(NUMERIC_DATA[0]);
+*/
+//mode standard
+//const char *NUMERIC_DATA[] = { "CCASN", "CCASN-1", "EAST", "IRMS1", "URMS1", "SINST", "SMAXSN", "SMAXSN-1", "UMOY" };
+
+//const size_t NUMERIC_DATA_COUNT = sizeof(NUMERIC_DATA) / sizeof(NUMERIC_DATA[0]);
 
 // identifiant du compteur
-static const char *LABEL_ADCO = "ADCO";
+
+
+//static const char *LABEL_ADCO = "ADCO";
+static const char *LABEL_ID_DEVICE = "ADSC";
 
 
 typedef struct mqtt_task_param_s {
@@ -115,7 +125,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     }
 }
 
-
+/*
 static int find_label_in_list( const char *label, const char *list[], size_t nb )
 {
     for( int i=0; i<nb; i++ )
@@ -125,7 +135,6 @@ static int find_label_in_list( const char *label, const char *list[], size_t nb 
     }
     return -1;
 }
-
 
 static int is_published( const tic_dataset_t *ds )
 {
@@ -137,7 +146,7 @@ static int is_integer( const tic_dataset_t *ds )
 {
     return find_label_in_list(  ds->etiquette, NUMERIC_DATA, NUMERIC_DATA_COUNT ) >= 0;
 }
-
+*/
 
 //static const char *FORMAT_STRING_SANS_HORODATE = "  {\"lbl\": \"%s\", \"val\": \"%s\" }";
 //static const char *FORMAT_STRING_AVEC_HORODATE = "  {\"lbl\": \"%s\", \"ts\": \"%s\", \"val\": \"%s\" }";
@@ -151,27 +160,16 @@ static const char *FORMAT_NUMERIC_SANS_HORODATE = "  \"%s\" : { \"val\":%d }";
 
 static size_t printf_ds( char *buf, size_t size, const tic_dataset_t *ds )
 {
-    if( is_integer( ds ) )
+    if( ds->flags & TIC_DS_NUMERIQUE )
     {
         // formatte la valeur numerique avec ou sans horodate
         uint32_t val = strtol( ds->valeur, NULL, 10 );
-        if( ds->horodate[0] == '\0' )
-            return snprintf( buf, size, FORMAT_NUMERIC_SANS_HORODATE, ds->etiquette, val);
-/*        else
-            return snprintf( buf, size, FORMAT_NUMERIC_AVEC_HORODATE, ds->etiquette, ds->horodate, val );
-*/
+        return snprintf( buf, size, FORMAT_NUMERIC_SANS_HORODATE, ds->etiquette, val);
     }
     else
     {
-        // formatte la valeur texte avec ou sans horodate
-        if( ds->horodate[0] == '\0' )
-            return snprintf( buf, size, FORMAT_STRING_SANS_HORODATE, ds->etiquette, ds->valeur);
-/*
-        else
-            return snprintf( buf, size, FORMAT_STRING_AVEC_HORODATE, ds->etiquette, ds->horodate, ds->valeur );
-*/
+        return snprintf( buf, size, FORMAT_STRING_SANS_HORODATE, ds->etiquette, ds->valeur);
     }
-    return 0;
 }
 
 
@@ -193,7 +191,7 @@ static tic_dataset_t *filtre_datasets( tic_dataset_t *ds )
         tic_dataset_t *tmp_next = ds->next;
         ds->next = NULL;
 
-        if( is_published( ds ) )
+        if( ds->flags & TIC_DS_PUBLISHED )
         {
             if( !head )
                 head = ds;
@@ -241,7 +239,7 @@ static mqtt_error_t datasets_to_topic (char *buf, size_t size, const tic_dataset
 {
     while( ds != NULL )
     {
-        if( strncmp( ds->etiquette, LABEL_ADCO, sizeof(*LABEL_ADCO) ) == 0)
+        if( strcmp( ds->etiquette, LABEL_ID_DEVICE ) == 0 )
         {
             snprintf( buf, size, MQTT_TOPIC_FORMAT, ds->valeur );
             ESP_LOGI( TAG , "Topic=%s", buf );
@@ -266,7 +264,7 @@ static mqtt_error_t datasets_to_json( char *buf, size_t size, const tic_dataset_
     while( ds!=NULL && (size-pos) > 0 )
     {
         // ignore les etiquettes non exportées 
-        if( is_published( ds ) == 0  )
+        if( (ds->flags & TIC_DS_PUBLISHED) == 0  )
         {
             ESP_LOGE( TAG, "Probleme avec le filtrage en amont de datasets_to_json()");
             ds = ds->next;

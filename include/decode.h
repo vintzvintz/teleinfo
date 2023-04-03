@@ -1,11 +1,13 @@
 
 #pragma once
 
-// alias pour les tailles de buffers
-#define TIC_SIZE_BUF0 TIC_SIZE_ETIQUETTE
-#define TIC_SIZE_BUF1 TIC_SIZE_VALUE
-#define TIC_SIZE_BUF2 TIC_SIZE_VALUE
-#define TIC_SIZE_BUF3 TIC_SIZE_CHECKSUM
+// taille des buffers
+#define TIC_SIZE_ETIQUETTE    16     // etiquette
+#define TIC_SIZE_VALUE        128    // donnée ou horodate
+#define TIC_SIZE_CHECKSUM     4      // checksum
+
+
+
 
 // nb maxi de datasets dans une trame
 #define TIC_MAX_DATASETS    99
@@ -29,10 +31,6 @@ typedef uint32_t tic_dataset_flags_t;
  * tic_dataset_t est une liste de données décodées = contenu d'une trame complete
  */
 
-// taille des buffers
-#define TIC_SIZE_ETIQUETTE    16     // etiquette
-#define TIC_SIZE_VALUE        128    // donnée ou horodate
-#define TIC_SIZE_CHECKSUM     4      // checksum
 
 
 

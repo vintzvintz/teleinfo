@@ -1,5 +1,5 @@
 
-#include "tic_decode.h"
+#include "decode.h"
 
 typedef struct flagdef_s{
     tic_char_t label[TIC_SIZE_ETIQUETTE];

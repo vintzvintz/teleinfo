@@ -14,7 +14,7 @@
 #include "oled.h"
 #include "pinout.h"
 
-#include "tic_decode.h"
+#include "decode.h"
 
 
 #if CONFIG_FREERTOS_UNICORE

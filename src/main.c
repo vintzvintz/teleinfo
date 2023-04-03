@@ -19,7 +19,7 @@
 #include "esp_netif.h"
 #include "esp_sntp.h"
 
-#include "tic_decode.h"
+#include "decode.h"
 #include "uart_events.h"
 #include "wifi.h"
 #include "mqtt.h"

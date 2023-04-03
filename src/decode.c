@@ -8,12 +8,12 @@
 #include "esp_netif.h"
 #include "mqtt_client.h"
 
-#include "tic_decode.h"
-#include "tic_flags.h"
+#include "decode.h"
+#include "flags.h"
 #include "status.h"
 #include "ticled.h"
 
-static const char *TAG = "tic_decode";
+static const char *TAG = "decode";
 
 #define CHAR_STX  0x02    //   start of text - début d'une trame
 #define CHAR_ETX  0x03    //   end of text - fin d'une trame
@@ -29,6 +29,11 @@ static const char *TAG = "tic_decode";
     #define TIC_SEPARATOR  0x09    /* TAB */
 #endif
 
+// alias pour les tailles de buffers
+#define TIC_SIZE_BUF0 TIC_SIZE_ETIQUETTE
+#define TIC_SIZE_BUF1 TIC_SIZE_VALUE
+#define TIC_SIZE_BUF2 TIC_SIZE_VALUE
+#define TIC_SIZE_BUF3 TIC_SIZE_CHECKSUM
 
 typedef struct tic_taskdecode_params_s {
     StreamBufferHandle_t from_uart;
@@ -90,25 +95,23 @@ uint32_t tic_dataset_size( tic_dataset_t *dataset )
 tic_error_t tic_dataset_print( tic_dataset_t *ds )
 {
     // ESP_LOGD( TAG, "print_datasets()");
-    char flags_str[4];
+    char flags_str[3];
     while( ds != NULL )
     {
         flags_str[0]= '.';
         flags_str[1]= '.';
-        flags_str[2]= '.';
-        flags_str[3]=0;    // null-terminated
+        flags_str[2]=0;    // null-terminated
         if( ds->flags & TIC_DS_PUBLISHED )
         {
-            flags_str[0]= 'P';
-            flags_str[1]= ( ds->flags & TIC_DS_NUMERIQUE ) ? 'N' : 'T';
-            flags_str[2]= ( ds->flags & TIC_DS_HAS_TIMESTAMP ) ? 'h' : '.';
+            flags_str[0]= ( ds->flags & TIC_DS_NUMERIQUE ) ? 'N' : 'S';
+            if( ds->flags & TIC_DS_HAS_TIMESTAMP )
+                flags_str[1]= 'H';
         }
-        ESP_LOGI( TAG, "%8.8s %s %s %s", ds->etiquette, flags_str, ds->horodate, ds->valeur );
+        ESP_LOGD( TAG, "%8.8s %s %s %s", ds->etiquette, flags_str, ds->horodate, ds->valeur );
         ds = ds->next;
     }
     return TIC_OK;
 }
-
 
 void tic_dataset_free( tic_dataset_t *ds )
 {
