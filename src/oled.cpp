@@ -12,6 +12,8 @@
 #include "lcdgfx_gui.h"
 
 #include "oled.h"
+#include "pinout.h"
+
 #include "tic_decode.h"
 
 
@@ -233,7 +235,7 @@ static void oled_task(void *pvParams)
 
 extern "C" void oled_task_start( QueueHandle_t to_oled )
 {
-    esp_log_level_set( TAG, ESP_LOG_DEBUG );
+    esp_log_level_set( TAG, ESP_LOG_INFO );
     ESP_LOGI( TAG, "oled_task_start()" );
 
     oled_task_param_t *task_params = (oled_task_param_t *)malloc( sizeof(oled_task_param_t) );

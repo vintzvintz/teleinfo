@@ -1,6 +1,7 @@
 
 
-
+/* Intellisense bullshit */
+#undef __linux__
 
 #define LWIP_DEBUG 1
 
@@ -15,9 +16,8 @@
 #include "mqtt_client.h"
 #include "nvs_flash.h"
 #include "esp_log.h"
-
-
-#include "sntp.h"
+#include "esp_netif.h"
+#include "esp_sntp.h"
 
 #include "tic_decode.h"
 #include "uart_events.h"
@@ -27,6 +27,7 @@
 #include "ticled.h"
 #include "clock.h"
 #include "status.h"
+#include "bouton.h"
 
 
 
@@ -59,7 +60,7 @@ void app_main(void)
 
 
     ESP_LOGI(TAG, "[APP] Startup..");
-    ESP_LOGI(TAG, "[APP] Free memory: %d bytes", esp_get_free_heap_size());
+    ESP_LOGI(TAG, "[APP] Free memory: %lu bytes", esp_get_free_heap_size());
     ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
 
     // transfere le flux de données brutes depuis l'UART vers le decodeur
@@ -97,6 +98,8 @@ void app_main(void)
     status_init( to_oled, to_ticled );
     nvs_initialise();    // required for wifi driver
     wifi_task_start( );
+
+    start_bouton_task();
 
     oled_task_start( to_oled );
     ticled_start_task( to_ticled );

@@ -8,7 +8,7 @@
 #include "mqtt_client.h"
 
 #include "esp_log.h"
-
+#include "pinout.h"
 #include "ticled.h"
 
 static const char *TAG = "led_blink";

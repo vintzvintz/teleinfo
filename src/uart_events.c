@@ -6,10 +6,12 @@
 #include "freertos/queue.h"
 #include "freertos/stream_buffer.h"
 #include "freertos/event_groups.h"
+#include "driver/gpio.h"
 #include "driver/uart.h"
 #include "esp_log.h"
 #include "esp_netif.h"
 
+#include "pinout.h"
 #include "uart_events.h"
 #include "status.h"
 
@@ -38,7 +40,7 @@ static void uart_task(void *pvParameters)
 
     for(;;) {
         //Waiting for UART event.
-        if(xQueueReceive(uart1_queue, (void * )&event, (portTickType)portMAX_DELAY)) {
+        if(xQueueReceive(uart1_queue, (void * )&event, portMAX_DELAY)) {
             memset(dtmp, 0, RD_BUF_SIZE);
 
             switch(event.type) {
@@ -115,7 +117,7 @@ void uart_task_start( StreamBufferHandle_t streambuf_to_decoder )
     ESP_LOGD( TAG, "uart_driver_install()" );
     uart_driver_install(UART_TELEINFO_NUM, BUF_SIZE * 2, BUF_SIZE * 2, 20, &uart1_queue, 0);
     uart_param_config(UART_TELEINFO_NUM, &uart_config_mode_historique);
-    uart_set_pin(UART_TELEINFO_NUM, UART_PIN_NO_CHANGE, 18, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    uart_set_pin(UART_TELEINFO_NUM, UART_PIN_NO_CHANGE, UART_TELEINFO_SIGNAL_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     uart_set_rx_full_threshold( UART_TELEINFO_NUM, TIC_UART_THRESOLD);
 
     //Create a task to handler UART event from ISR

@@ -11,8 +11,11 @@
 #include "esp_netif.h"
 #include "esp_log.h"
 
+/* Intellisense bullshit */
+#undef __linux__
+
 // lwIP component
-#include "sntp.h"
+#include "esp_sntp.h"
 
 #include "clock.h"
 #include "status.h"
@@ -38,7 +41,7 @@ void sntp_callback( struct timeval *tv )
     // clock will be marked lost if not resynced periodically
     uint32_t clock_lost_delay = sntp_get_sync_interval() * MAX_RESYNC_INTERVAL ;
     xTimerCreate( "clock_watchdog", clock_lost_delay / portTICK_PERIOD_MS, pdFALSE, NULL, clock_lost );
-    ESP_LOGI( TAG, "Got NTP time from %s. Sync will be lost in %d seconds", CLOCK_SERVER_NAME, clock_lost_delay / 1000 );
+    ESP_LOGI( TAG, "Got NTP time from %s. Sync will be lost in %lu seconds", CLOCK_SERVER_NAME, clock_lost_delay / 1000 );
 
     // log full time+date
     time_t now = tv->tv_sec;

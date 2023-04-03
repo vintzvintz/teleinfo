@@ -1,11 +1,7 @@
-/* WiFi station Example
 
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
+/* Intellisense bullshit */
+#undef __linux__
 
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
-*/
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -120,7 +116,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         break;
 
     default:
-        ESP_LOGD( TAG, "WIFI_EVENT id=%#x", event_id );
+        ESP_LOGD( TAG, "WIFI_EVENT id=%#lx", event_id );
     }
 }
 
@@ -145,7 +141,7 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
         break;
 
     default:
-        ESP_LOGD( TAG, "IP_EVENT id=%#x", event_id );
+        ESP_LOGD( TAG, "IP_EVENT id=%#lx", event_id );
     }
 }
 
