@@ -417,7 +417,7 @@ BaseType_t mqtt_task_start( QueueHandle_t from_decoder )
         .broker.verification.psk_hint_key = &psk_hint_key,
     };
 
-    debug_mqtt_cfg( mqtt_cfg );
+    log_mqtt_cfg( mqtt_cfg );
     esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqtt_cfg);
     if( client == NULL )
     {
