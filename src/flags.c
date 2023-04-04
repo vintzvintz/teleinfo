@@ -1,17 +1,8 @@
 
-
-// a incluce avant tic_decode.h
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/event_groups.h"
-#include "freertos/stream_buffer.h"
-#include "freertos/queue.h"
-
-
 #include <stdio.h>
 #include <string.h>
-#include "decode.h"
 #include "flags.h"
+#include "decode.h"
 
 #define TEXTE (TIC_DS_PUBLISHED)
 #define NUMERIQUE (TIC_DS_PUBLISHED|TIC_DS_NUMERIQUE)

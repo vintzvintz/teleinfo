@@ -1,6 +1,6 @@
 #include "esp_netif.h"
 #include "freertos/event_groups.h"
-
+#include "freertos/queue.h"
 
 #define STATUS_UART_DEFAULT_TIMEOUT       500     // ms
 #define STATUS_TICFRAME_DEFAUT_TIMEOUT   2000    // ms

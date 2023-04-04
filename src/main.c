@@ -1,7 +1,7 @@
 
 
 /* Intellisense bullshit */
-#undef __linux__
+//#undef __linux__
 
 #define LWIP_DEBUG 1
 
@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
+//#include "freertos/task.h"
 #include "freertos/queue.h"
 #include "freertos/event_groups.h"
 //#include "freertos/stream_buffer.h"

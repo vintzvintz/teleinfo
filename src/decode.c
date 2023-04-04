@@ -2,11 +2,9 @@
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/event_groups.h"
 #include "freertos/stream_buffer.h"
 #include "esp_log.h"
-#include "esp_netif.h"
-#include "mqtt_client.h"
+
 
 #include "errors.h"
 #include "decode.h"
