@@ -8,12 +8,14 @@
 #include "esp_netif.h"
 #include "mqtt_client.h"
 
+#include "errors.h"
 #include "decode.h"
+#include "process.h"
 #include "flags.h"
 #include "status.h"
 #include "ticled.h"
 
-static const char *TAG = "decode";
+static const char *TAG = "decode.c";
 
 #define CHAR_STX  0x02    //   start of text - début d'une trame
 #define CHAR_ETX  0x03    //   end of text - fin d'une trame
@@ -35,15 +37,16 @@ static const char *TAG = "decode";
 #define TIC_SIZE_BUF2 TIC_SIZE_VALUE
 #define TIC_SIZE_BUF3 TIC_SIZE_CHECKSUM
 
+/*
 typedef struct tic_taskdecode_params_s {
     StreamBufferHandle_t from_uart;
-    QueueHandle_t to_mqtt;
-    EventGroupHandle_t to_ticled;
+    QueueHandle_t to_process;
 } tic_taskdecode_params_t;
+*/
 
-/***
- * tic_frame_s contient les données d'une trame en cours de réception 
- */
+StreamBufferHandle_t s_to_decoder;
+
+// tic_frame_s contient les données d'une trame en cours de réception
 typedef struct tic_decoder_s {
     
     // etat de la frame complète
@@ -59,12 +62,6 @@ typedef struct tic_decoder_s {
     // selecteur du buffer courant
     tic_char_t *cur_buf;
     size_t cur_buf_size;
-
-    // queue pour envoyer les trames completes au client mqtt
-    QueueHandle_t to_mqtt;
-
-    // event_groups pour faire clignoter la Led
-    EventGroupHandle_t to_ticled;
 } tic_decoder_t;
 
 
@@ -178,24 +175,14 @@ tic_dataset_t * tic_dataset_sort(tic_dataset_t *ds)
 }
 
 
-
 static void reset_decoder( tic_decoder_t *td )
 {
     //ESP_LOGD( TAG, "reset_decoder()");
-
-    // membres conservés
-    QueueHandle_t to_mqtt = td->to_mqtt;
-    EventGroupHandle_t to_ticled = td->to_ticled;
-
     // desalloue les datasets
     tic_dataset_free( td->datasets );
 
     // met à 0 toutes les variables et buffers 
     memset( td, 0, sizeof(tic_decoder_t) );
-
-    // restaure les membres conservés
-    td->to_mqtt = to_mqtt;
-    td->to_ticled = to_ticled;
 }
 
 
@@ -233,21 +220,6 @@ static void addbuf( uint32_t *s1, const tic_char_t *buf )
         *s1 += *p;
         p++;
     }
-}
-
-// envoie, ou non, des donnes pour mettre à jour l'afficheur
-static tic_error_t affiche_dataset( tic_decoder_t *td, const tic_dataset_t *ds )
-{
-    
-    //if( strcmp( ds->etiquette, "PAPP" ) == 0 )
-    if( strcmp( ds->etiquette, "SINST" ) == 0 )
-    {
-       // oled_update( td->to_oled, DISPLAY_PAPP, ds->valeur );
-        uint32_t papp = strtol( ds->valeur, NULL, 10 );
-        status_papp_update( papp );
-    }
-    //ESP_LOGD ( TAG, "%s %s", ds->etiquette, ds->valeur);
-    return TIC_OK;
 }
 
 /*
@@ -345,7 +317,7 @@ static tic_error_t dataset_end( tic_decoder_t *td ) {
     td->datasets = insert_sort( td->datasets, ds );
 
     // mise à jour afficheur oled
-    affiche_dataset( td, ds );
+    //affiche_dataset( td, ds );
 
     return TIC_OK;
 }
@@ -381,10 +353,10 @@ static tic_error_t frame_end( tic_decoder_t *td )
     //ESP_LOGI( TAG, "Trame de %d datasets %d bytes (%p)", nb, size, td->datasets );
 
     tic_error_t ret = TIC_OK;
-    BaseType_t send_ok = xQueueSend( td->to_mqtt, &(td->datasets), 10 );
+    BaseType_t send_ok = process_receive_datasets( td->datasets );
     if( send_ok == pdTRUE )
     {
-        // les datasets devront être free() par le recepteur mqtt_client
+        // les datasets devront être free() par le recepteur ( process_task )
         td->datasets = NULL;
     }
     else
@@ -392,12 +364,12 @@ static tic_error_t frame_end( tic_decoder_t *td )
         ESP_LOGE( TAG, "Queue pleine : impossible d'envoyer la trame vers mqtt_client " );
         ret = TIC_ERR_QUEUEFULL;
     }
-    reset_decoder( td );
+    reset_decoder( td );  // appelle tic_dataset_free( td->datasets )
     return ret;
 }
 
 
-static tic_error_t process_separator( tic_decoder_t *td, const tic_char_t ch )
+static tic_error_t decode_separator( tic_decoder_t *td, const tic_char_t ch )
 {
     //ESP_LOGD(  TAG, "separator_received" );
     if ( td->cur_buf == td->buf0 )
@@ -428,7 +400,7 @@ static tic_error_t process_separator( tic_decoder_t *td, const tic_char_t ch )
 }
 
 
-static tic_error_t process_data( tic_decoder_t *td, const tic_char_t ch )
+static tic_error_t decode_data( tic_decoder_t *td, const tic_char_t ch )
 {
     // nombre de caractères déja reçus
     size_t pos = strlen( td->cur_buf );
@@ -436,7 +408,7 @@ static tic_error_t process_data( tic_decoder_t *td, const tic_char_t ch )
     // cas particulier pour le séparateur 
     if ( ch == TIC_SEPARATOR )
     {
-        return process_separator( td, ch );
+        return decode_separator( td, ch );
     }
 
     // ajoute le caractère si le buffer n'est pas plein
@@ -455,7 +427,7 @@ static tic_error_t process_data( tic_decoder_t *td, const tic_char_t ch )
 }
 
 
-static tic_error_t process_char( tic_decoder_t *td, const tic_char_t ch )  {
+static tic_error_t decode_char( tic_decoder_t *td, const tic_char_t ch )  {
 
     // ESP_LOGD( TAG, "process_char() : '%c'", ch );
     tic_error_t ret = TIC_OK;
@@ -486,19 +458,19 @@ static tic_error_t process_char( tic_decoder_t *td, const tic_char_t ch )  {
             break;
         default:
             // autres caractères : label, timestamp, value ou separateur
-            ret = process_data( td, ch );
+            ret = decode_data( td, ch );
     }
     return ret;
 }
 
 
-static tic_error_t process_raw_data( tic_decoder_t* td, const tic_char_t *buf, size_t len )
+static tic_error_t decode_raw_data( tic_decoder_t* td, const tic_char_t *buf, size_t len )
 {
     tic_error_t err = TIC_OK;
     uint32_t i;
     for( i=0; ( err==TIC_OK && i<len ) ; i++ )
     {
-        err = process_char( td, buf[i] );
+        err = decode_char( td, buf[i] );
     }
     return err;
 }
@@ -506,52 +478,56 @@ static tic_error_t process_raw_data( tic_decoder_t* td, const tic_char_t *buf, s
 
 void tic_decode_task( void *pvParams )
 {
-    tic_taskdecode_params_t *params = (tic_taskdecode_params_t *)pvParams;
-
     // donnees internes du decodeur
-    tic_decoder_t td = {
-        .to_mqtt = params->to_mqtt,
-        .to_ticled = params->to_ticled,
-    };
-
-    // buffer pour recevoir les données de la tache uart_events
+    tic_decoder_t *td = (tic_decoder_t *)malloc( sizeof( tic_decoder_t) );
+    // buffer pour recevoir les données de la tache uart_events 
     tic_char_t *rx_buf = malloc( RX_BUF_SIZE );
-    if( rx_buf == NULL )
+    if( (td==NULL) || (rx_buf==NULL) )
     {
         ESP_LOGD( TAG, "malloc() failed" );
         return;
     }
+    reset_decoder( td );
 
     tic_error_t err;
     for(;;) {
-        size_t n = xStreamBufferReceive( params->from_uart, rx_buf, RX_BUF_SIZE, portMAX_DELAY );
+        size_t n = xStreamBufferReceive( s_to_decoder, rx_buf, RX_BUF_SIZE, portMAX_DELAY );
 
-        err = process_raw_data( &td, rx_buf, n );
+        err = decode_raw_data( td, rx_buf, n );
         if( err != TIC_OK )
         {
-            ESP_LOGE(TAG, "tic decoder error %#0lx", err);
-            reset_decoder( &td );
+            ESP_LOGE(TAG, "tic decoder error (%#0x)", err);
+            reset_decoder( td );
         }
     }
 }
 
+// Appelé par la tâche uart_events.c pour envoyer les bytes reçus
+size_t decode_receive_bytes( void *buf , size_t length )
+{
+    return xStreamBufferSend( s_to_decoder, buf, length, portMAX_DELAY);
+}
 
- /***
-  * Create a task to decode teleinfo raw bytestream received from uart
-  */
-void tic_decode_start_task( StreamBufferHandle_t from_uart, QueueHandle_t mqtt_queue, EventGroupHandle_t to_ticled, QueueHandle_t to_oled )
+// Create a task to decode teleinfo raw bytestream received from uart
+void tic_decode_task_start( )
 {
     esp_log_level_set( TAG, ESP_LOG_DEBUG );
 
+    /*
     tic_taskdecode_params_t *tic_task_params = malloc( sizeof(tic_taskdecode_params_t) );
     if( tic_task_params == NULL )
     {
         ESP_LOGE( TAG, "malloc() failed" );
         return;
     }
+    */
 
-    tic_task_params->from_uart = from_uart;
-    tic_task_params->to_mqtt = mqtt_queue;
-    tic_task_params->to_ticled = to_ticled;
-    xTaskCreate(tic_decode_task, "tic_decode_task", 4096, (void *)tic_task_params, 12, NULL);
+    // transfere le flux de données brutes depuis l'UART vers le decodeur
+    s_to_decoder = xStreamBufferCreate( DECODE_RCV_BUFFER_SIZE, DECODE_RCV_BUFFER_TRIGGER );
+    if( s_to_decoder == NULL )
+    {
+        ESP_LOGE( TAG, "Failed to create to_decoder StreamBuffer" );
+    }
+
+    xTaskCreate(tic_decode_task, "tic_decode_task", 4096, NULL, 12, NULL);
 }

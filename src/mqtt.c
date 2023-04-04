@@ -5,59 +5,29 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
-#include "esp_wifi.h"
-#include "esp_system.h"
-#include "nvs_flash.h"
-#include "esp_netif.h"
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
-#include "freertos/stream_buffer.h"
-#include "freertos/event_groups.h"
-
+#include "esp_netif.h"
 #include "esp_log.h"
 #include "esp_tls.h"
 #include "mqtt_client.h"
 
-#include "lwip/sockets.h"
-#include "lwip/dns.h"
-#include "lwip/netdb.h"
-
-#include "decode.h"
-#include "flags.h"
+#include "errors.h"
+#include "process.h"
 #include "status.h"
 #include "mqtt.h"
 
 static const char *TAG = "mqtt_task";
 
-
-// données à publier 
-//const char *PUBLISHED_DATA[] = { "IINST", "PTEC", "BASE", "HCHC", "HCHP", "PAPP" };
-//const size_t PUBLISEHD_DATA_COUNT = sizeof(PUBLISHED_DATA) / sizeof(PUBLISHED_DATA[0]);
-
-// données de type numerique
-/*
-
-// mode historique
-const char *NUMERIC_DATA[] = { "IINST", "BASE", "HCHC", "HCHP", "PAPP", "IMAX", "ISOUSC" };
-*/
-//mode standard
-//const char *NUMERIC_DATA[] = { "CCASN", "CCASN-1", "EAST", "IRMS1", "URMS1", "SINST", "SMAXSN", "SMAXSN-1", "UMOY" };
-
-//const size_t NUMERIC_DATA_COUNT = sizeof(NUMERIC_DATA) / sizeof(NUMERIC_DATA[0]);
-
-// identifiant du compteur
-
-
-//static const char *LABEL_ADCO = "ADCO";
-static const char *LABEL_ID_DEVICE = "ADSC";
-
-
 typedef struct mqtt_task_param_s {
-    QueueHandle_t from_decoder;
+    //QueueHandle_t from_decoder;
     esp_mqtt_client_handle_t esp_client;
 } mqtt_task_param_t;
+
+
+static QueueHandle_t s_to_mqtt = NULL;
+
 
 static void log_error_if_nonzero(const char *message, int error_code)
 {
@@ -66,6 +36,55 @@ static void log_error_if_nonzero(const char *message, int error_code)
     }
 }
 
+// Alloue/libere un mqtt_msg_t  
+// pour la communication entre tâches process.c et mqtt.c
+mqtt_msg_t * mqtt_msg_alloc()
+{
+    mqtt_msg_t *msg = malloc( sizeof(mqtt_msg_t) );
+    char *topic_ptr = malloc( MQTT_TOPIC_BUFFER_SIZE );
+    char *payload_ptr = malloc( MQTT_PAYLOAD_BUFFER_SIZE );
+
+    if ( msg!=NULL && topic_ptr!=NULL && payload_ptr!=NULL )
+    {
+        msg->topic = topic_ptr;
+        msg->payload = payload_ptr;
+        return msg;
+    }
+    else
+    {
+        ESP_LOGE( TAG, "malloc() failed");
+        return NULL;
+    }
+}
+
+void mqtt_msg_free(mqtt_msg_t *msg)
+{
+    if( msg == NULL)
+        return;
+
+    if( msg->topic != NULL )
+    { 
+        free( msg->topic);
+        msg->topic = NULL;
+    }
+    if( msg->payload != NULL )
+    { 
+        free( msg->payload);
+        msg->payload = NULL;
+    }
+}
+
+
+tic_error_t mqtt_receive_msg( mqtt_msg_t *msg )
+{
+    BaseType_t send_ok = xQueueSend( s_to_mqtt, msg, 10 );
+    if( send_ok != pdTRUE )
+    {
+        ESP_LOGE( TAG, "Queue pleine : impossible de recevoir le message mqtt" );
+        return TIC_ERR_QUEUEFULL;
+    }
+    return TIC_OK;
+}
 
 /*
  * @brief Event handler registered to receive MQTT events
@@ -125,180 +144,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     }
 }
 
-/*
-static int find_label_in_list( const char *label, const char *list[], size_t nb )
-{
-    for( int i=0; i<nb; i++ )
-    {
-        if( strcmp( label, list[i] ) == 0 )
-            return i;
-    }
-    return -1;
-}
-
-static int is_published( const tic_dataset_t *ds )
-{
-    return true;
-    //return find_label_in_list( ds->etiquette, PUBLISHED_DATA, PUBLISEHD_DATA_COUNT ) >= 0;
-}
-
-static int is_integer( const tic_dataset_t *ds )
-{
-    return find_label_in_list(  ds->etiquette, NUMERIC_DATA, NUMERIC_DATA_COUNT ) >= 0;
-}
-*/
-
-//static const char *FORMAT_STRING_SANS_HORODATE = "  {\"lbl\": \"%s\", \"val\": \"%s\" }";
-//static const char *FORMAT_STRING_AVEC_HORODATE = "  {\"lbl\": \"%s\", \"ts\": \"%s\", \"val\": \"%s\" }";
-//static const char *FORMAT_NUMERIC_SANS_HORODATE = "  {\"lbl\": \"%s\", \"val\": %d }";
-//static const char *FORMAT_NUMERIC_AVEC_HORODATE = "  {\"lbl\": \"%s\", \"ts\": \"%s\", \"val\": %d }";
-static const char *FORMAT_ISO8601 = "%Y-%m-%dT%H:%M:%S%z";
-
-static const char *FORMAT_STRING_SANS_HORODATE = "  \"%s\" : { \"val\":\"%s\" }";
-static const char *FORMAT_NUMERIC_SANS_HORODATE = "  \"%s\" : { \"val\":%d }";
-
-
-static size_t printf_ds( char *buf, size_t size, const tic_dataset_t *ds )
-{
-    if( ds->flags & TIC_DS_NUMERIQUE )
-    {
-        // formatte la valeur numerique avec ou sans horodate
-        uint32_t val = strtol( ds->valeur, NULL, 10 );
-        return snprintf( buf, size, FORMAT_NUMERIC_SANS_HORODATE, ds->etiquette, val);
-    }
-    else
-    {
-        return snprintf( buf, size, FORMAT_STRING_SANS_HORODATE, ds->etiquette, ds->valeur);
-    }
-}
-
-
-static size_t get_time_iso8601( char *buf, size_t size )
-{
-    time_t now = time(NULL);
-    struct tm timeinfo;
-    localtime_r( &now, &timeinfo );
-    return strftime( buf, size, FORMAT_ISO8601, &timeinfo );
-}
-
-
-static tic_dataset_t *filtre_datasets( tic_dataset_t *ds )
-{
-    tic_dataset_t *head = NULL; 
-    tic_dataset_t *tail = NULL;   // pointeur sur la queue pour conserver l'ordre
-    while( ds != NULL )
-    {
-        tic_dataset_t *tmp_next = ds->next;
-        ds->next = NULL;
-
-        if( ds->flags & TIC_DS_PUBLISHED )
-        {
-            if( !head )
-                head = ds;
-
-            if( !tail )
-                tail = ds;
-
-            tail->next = ds;
-            tail = ds;
-        }
-        else
-        {
-            free(ds);
-        }
-        ds = tmp_next;
-    }
-    return head;
-}
-
-// compare deux trames - les datasets doivent être triés !
-int compare_datasets( const tic_dataset_t *ds1, const tic_dataset_t *ds2 )
-{
-    while( (ds1!=NULL) && (ds2!= NULL) )
-    {
-        int cmp_label = strncmp( ds1->etiquette, ds2->etiquette, sizeof( ds1->etiquette) );
-        if( cmp_label != 0 )
-            return cmp_label;
-
-        int cmp_value = strncmp( ds1->valeur, ds2->valeur, sizeof( ds1->valeur) );
-        if( cmp_value != 0 )
-            return cmp_value;
-
-        ds1 = ds1->next;
-        ds2 = ds2->next;
-    }
-    // nombre de datasets différents
-    if( (ds1!=NULL) || (ds2!=NULL) )
-        return -1;
-
-    return 0;
-}
-
-
-static mqtt_error_t datasets_to_topic (char *buf, size_t size, const tic_dataset_t *ds )
-{
-    while( ds != NULL )
-    {
-        if( strcmp( ds->etiquette, LABEL_ID_DEVICE ) == 0 )
-        {
-            snprintf( buf, size, MQTT_TOPIC_FORMAT, ds->valeur );
-            ESP_LOGI( TAG , "Topic=%s", buf );
-            return MQTT_OK;
-        }
-        ds = ds->next;
-    }
-    ESP_LOGE( TAG, "ADCO (identifiant compteur) absent");
-    return MQTT_ERR_MISSING_DATA;
-}
-
-
-static mqtt_error_t datasets_to_json( char *buf, size_t size, const tic_dataset_t *ds )
-{
-    size_t pos = 0;
-
-    char time_buf[30];
-    get_time_iso8601( time_buf, sizeof(time_buf) );
-
-    pos += snprintf( &(buf[pos]), size-pos, "{  \"horodate\" : \"%s\",\n  \"tic\" : {\n", time_buf );
-
-    while( ds!=NULL && (size-pos) > 0 )
-    {
-        // ignore les etiquettes non exportées 
-        if( (ds->flags & TIC_DS_PUBLISHED) == 0  )
-        {
-            ESP_LOGE( TAG, "Probleme avec le filtrage en amont de datasets_to_json()");
-            ds = ds->next;
-            continue;
-        }
-
-        // formatte la donnée en JSON
-        pos += printf_ds( &(buf[pos]), size-pos, ds );
-
-        // separateurs
-        if( pos >= (size-2) )     // -2 pour la virgule et le \n 
-        {
-            ESP_LOGE( TAG, "JSON buffer overflow" );
-            return MQTT_ERR_OVERFLOW;
-        }
-        if( ds->next != NULL) 
-        {
-            buf[pos++] = ',';
-        }
-        buf[pos++] = '\n';
-
-        ds = ds->next;
-    }
-
-    // termine le tableau et l'objet JSON racine
-    pos += snprintf( &(buf[pos]), size-pos, "} }\n" );
-    if( pos > (size-1) )
-    {
-        ESP_LOGE( TAG, "JSON buffer overflow" );
-        return MQTT_ERR_OVERFLOW;
-    }
-    return MQTT_OK;
-}
-
 
 void mqtt_task( void *pvParams )
 {
@@ -313,65 +158,40 @@ void mqtt_task( void *pvParams )
         ESP_LOGE( TAG, "esp_mqtt_client_start() erreur %d", err);
     }
 
-    char *json_buffer = malloc(MQTT_JSON_BUFFER_SIZE);
-    char *topic_buffer = malloc(MQTT_TOPIC_BUFFER_SIZE);
-
     TickType_t max_ticks = MQTT_TIC_TIMEOUT_SEC * 1000 / portTICK_PERIOD_MS; 
-    tic_dataset_t *ds_last = NULL; 
-    tic_dataset_t *ds_new = NULL;
+    mqtt_msg_t *msg = NULL;
     for(;;)
     {
-        tic_dataset_free( ds_new );    ///libère la memoire allouée par tic_decode
-        ds_new = NULL;
+        mqtt_msg_free(msg);    // libère les buffers alloués par process_task
+        msg = NULL;
 
-        BaseType_t ds_received = xQueueReceive( params->from_decoder, &ds_new, max_ticks );
-        if( ds_received != pdTRUE )
+        BaseType_t msg_received = xQueueReceive( s_to_mqtt, &msg, max_ticks );
+        if( msg_received != pdTRUE )
         {
-            ESP_LOGI( TAG, "Aucune trame téléinfo reçue depuis %d secondes (%p)", MQTT_TIC_TIMEOUT_SEC, ds_new );
+            ESP_LOGI( TAG, "Aucune trame téléinfo reçue depuis %d secondes (%p)", TIC_PROCESS_TIMEOUT, msg );
+            continue;
+        }
+        if( msg==NULL )
+        {
+            ESP_LOGD( TAG, "Message MQTT null");
+            continue;
+        }
+        if( msg->topic==NULL || msg->topic[0]=='\0' )
+        {
+            ESP_LOGD( TAG, "Topic MQTT absent");
+            continue;
+        }
+        if( msg->payload==NULL || msg->payload[0]=='\0' )
+        {
+            ESP_LOGD( TAG, "Payload MQTT absent");
             continue;
         }
 
-        if( datasets_to_topic (topic_buffer, MQTT_TOPIC_BUFFER_SIZE, ds_new ) != MQTT_OK )
-        {
-            continue;
-        }
-
-        ds_new = filtre_datasets( ds_new );
-
-        if( compare_datasets( ds_last, ds_new ) != 0 )
-        {
-            // les donnnees ont changé, on les garde et on les publie
-            tic_dataset_free( ds_last );
-            ds_last = ds_new;
-            ds_new = NULL;
-        }
-        else
-        {
-            //ESP_LOGD( TAG, "Données non modifiées donc non publiées");
-            continue;
-        }
-
-        if( datasets_to_json( json_buffer, MQTT_JSON_BUFFER_SIZE, ds_last ) != MQTT_OK )
-        {
-            continue;
-        }
-
-        int msg_id = esp_mqtt_client_publish( params->esp_client, topic_buffer, json_buffer, 0, 0, 0);
-        if( msg_id < 0 )
-        {
-            //ESP_LOGE( TAG, "Echec de la publication mqtt");
-        }
+        esp_mqtt_client_publish( params->esp_client, msg->topic, msg->payload, 0, 0, 0);
+        /* ingore les erreurs*/
     }
 
     ESP_LOGE( TAG, "fatal: mqtt_task exited" );
-    if( json_buffer != NULL ) {
-        free(json_buffer);
-        json_buffer = NULL;
-    }
-    if( topic_buffer != NULL ) {
-        free(topic_buffer);
-        topic_buffer = NULL;
-    }
     esp_mqtt_client_destroy( params->esp_client );
     vTaskDelete(NULL);
 }
@@ -398,7 +218,7 @@ static void log_mqtt_cfg( esp_mqtt_client_config_t cfg )
 }
 
 
-BaseType_t mqtt_task_start( QueueHandle_t from_decoder )
+BaseType_t mqtt_task_start( )
 {
     //esp_log_level_set("*", ESP_LOG_INFO);
     esp_log_level_set( TAG, ESP_LOG_DEBUG );
@@ -424,17 +244,30 @@ BaseType_t mqtt_task_start( QueueHandle_t from_decoder )
     }
 
     esp_err_t err;
-    /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
+    // The last argument may be used to pass data to the event handler, in this example mqtt_event_handler 
     err = esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL );
     if( err != ESP_OK ) {
         ESP_LOGE( TAG, "esp_mqtt_client_register_event() erreur %d", err);
         return pdFALSE;
     }
 
-    // setup inter-task communication stuff
+    // passe des pointeurs à la tâche
     mqtt_task_param_t *task_params = malloc( sizeof( mqtt_task_param_t ) );
-    task_params->from_decoder = from_decoder;
+    if( task_params==NULL )
+    {
+        ESP_LOGE( TAG, "malloc() failed" );
+        return pdFALSE;
+    }
+
     task_params->esp_client = client;
+
+    // Queue pour recevoir les messages formattés à publier
+    s_to_mqtt = xQueueCreate( 5, sizeof( mqtt_msg_t * ) );
+    if( s_to_mqtt==NULL )
+    {
+        ESP_LOGE( TAG, "xCreateQueue() failed" );
+        return pdFALSE;    // inutile de continuer....
+    }
 
     // create mqtt client task
     BaseType_t task_created = xTaskCreate( mqtt_task, "mqtt_task", 4096, task_params, 12, NULL);

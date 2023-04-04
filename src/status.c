@@ -95,7 +95,7 @@ void status_rcv_uart( tic_mode_t mode, TickType_t next_before )
             xEventGroupSetBits( s_status_bits, BIT_SIGNAL_STANDARD );
             break;
         default:
-            // seeting both bits is error an condition
+            // setting both bits is an error condition
             xEventGroupSetBits( s_status_bits, (BIT_SIGNAL_HISTORIQUE|BIT_SIGNAL_STANDARD) );
     }
     update_status_tic();

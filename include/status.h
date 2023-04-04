@@ -1,5 +1,5 @@
-
-
+#include "esp_netif.h"
+#include "freertos/event_groups.h"
 
 
 #define STATUS_UART_DEFAULT_TIMEOUT       500     // ms

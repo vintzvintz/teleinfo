@@ -13,12 +13,13 @@
 
 #include "pinout.h"
 #include "uart_events.h"
+#include "decode.h"
 #include "status.h"
 
 
 static const char *TAG = "uart_events";
 
-#define BUF_SIZE (512)
+#define BUF_SIZE 512
 #define RD_BUF_SIZE (BUF_SIZE)
 
 
@@ -44,20 +45,20 @@ static const uart_config_t uart_config_mode_standard = {
 
 static QueueHandle_t uart1_queue;
 
-
+/*
 typedef struct uart_task_params_s {
     StreamBufferHandle_t to_decoder;
 
 } uart_task_params_t;
-
+*/
 
 static void uart_task(void *pvParameters)
 {
     uart_event_t event;
     uint8_t* dtmp = (uint8_t*) malloc(RD_BUF_SIZE);
 
-    uart_task_params_t *task_params = (uart_task_params_t *)pvParameters;
-    int length_read;
+    //uart_task_params_t *task_params = (uart_task_params_t *)pvParameters;
+    int length_read, length_sent;
 
     for(;;) {
         //Waiting for UART event.
@@ -69,7 +70,12 @@ static void uart_task(void *pvParameters)
                 case UART_DATA:
                     ESP_LOGD(TAG, "[UART DATA]: %d bytes", event.size);
                     length_read = uart_read_bytes(UART_TELEINFO_NUM, dtmp, event.size, portMAX_DELAY);
-                    xStreamBufferSend( task_params->to_decoder, dtmp, length_read, portMAX_DELAY);
+                    length_sent = decode_receive_bytes(dtmp, length_read );
+                    if( length_sent != length_read )
+                    {
+                        ESP_LOGE( TAG, "%d bytes perdus sur %d reçus", (length_read-length_sent), length_read);
+                    }
+                    //xStreamBufferSend( task_params->to_decoder, dtmp, length_read, portMAX_DELAY);
                     status_rcv_uart( TIC_MODE_STANDARD, 0 );
                     //printf("%s",dtmp);
                     break;
@@ -115,10 +121,11 @@ static void uart_task(void *pvParameters)
 }
 
 
-static uart_task_params_t uart_task_params;
+//static uart_task_params_t uart_task_params;
 
 
-void uart_task_start( StreamBufferHandle_t streambuf_to_decoder )
+//void uart_task_start( StreamBufferHandle_t streambuf_to_decoder )
+void uart_task_start( )
 {
     /* Configure parameters of an UART driver,
      * communication pins and install the driver */
@@ -134,8 +141,9 @@ void uart_task_start( StreamBufferHandle_t streambuf_to_decoder )
     uart_set_rx_full_threshold( UART_TELEINFO_NUM, TIC_UART_THRESOLD);
 
     //Create a task to handler UART event from ISR
-    uart_task_params.to_decoder = streambuf_to_decoder;
-    ESP_LOGD( TAG, "uart_xTaskCreate()" );
-    xTaskCreate(uart_task, "uart_task", 8192, &uart_task_params, 12, NULL);
+    //uart_task_params.to_decoder = streambuf_to_decoder;
+
+    //ESP_LOGD( TAG, "uart_xTaskCreate()" );
+    xTaskCreate(uart_task, "uart_task", 8192, NULL, 12, NULL);
 }
 

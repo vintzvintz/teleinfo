@@ -1,39 +1,28 @@
 
 #pragma once
 
+#include "errors.h"    // pour tic_error_t
+
+// buffer de reception - alimenté par la tâche uart
+#define DECODE_RCV_BUFFER_SIZE     512
+#define DECODE_RCV_BUFFER_TRIGGER   16
+
+
 // taille des buffers
 #define TIC_SIZE_ETIQUETTE    16     // etiquette
 #define TIC_SIZE_VALUE        128    // donnée ou horodate
 #define TIC_SIZE_CHECKSUM     4      // checksum
 
-
-
-
 // nb maxi de datasets dans une trame
 #define TIC_MAX_DATASETS    99
 
-// erreurs
-#define TIC_OK 0
-#define TIC_ERR 1
-#define TIC_ERR_INVALID_CHAR 2
-#define TIC_ERR_CHECKSUM 3
-#define TIC_ERR_OVERFLOW  4
-#define TIC_ERR_MEMORY 5
-#define TIC_ERR_QUEUEFULL 6
-#define TIC_ERR_UNKNOWN_DATA 7
-
 #define RX_BUF_SIZE 128
 
-typedef uint32_t tic_error_t;
 typedef char tic_char_t;
 typedef uint32_t tic_dataset_flags_t;
-/** 
- * tic_dataset_t est une liste de données décodées = contenu d'une trame complete
- */
 
 
-
-
+//tic_dataset_t est une liste de données décodées = contenu d'une trame complete
 typedef struct tic_dataset_s {
     tic_char_t etiquette[TIC_SIZE_ETIQUETTE];
     tic_char_t horodate[TIC_SIZE_VALUE];
@@ -51,6 +40,8 @@ uint32_t tic_dataset_size( tic_dataset_t *dataset );
 void tic_dataset_free( tic_dataset_t *dataset );
 tic_dataset_t * tic_dataset_sort(tic_dataset_t *ds);
 
+/* reception des bytes depuis uart_task */
+size_t decode_receive_bytes( void *buf , size_t length );
 
 /* creation initiale de la tache */
-void tic_decode_start_task( StreamBufferHandle_t from_uart, QueueHandle_t mqtt_queue, EventGroupHandle_t blink_events, QueueHandle_t to_oled );
+void tic_decode_task_start( );

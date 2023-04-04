@@ -10,6 +10,7 @@ set(srcs
     "oled.cpp"
     "status.c"
     "decode.c"
+    "process.c"
     "flags.c"
     "ticled.c"
     "uart_events.c"
