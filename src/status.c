@@ -15,7 +15,7 @@
 #include "oled.h"
 #include "ticled.h"
 
-//static const char *TAG = "status.c";
+static const char *TAG = "status.c";
 
 const char *STATUS_TIC_TXT_NOSIGNAL   = "no signal";
 const char *STATUS_TIC_TXT_HISTORIQUE = "historique";
@@ -28,8 +28,7 @@ const char *STATUS_ERROR = "error";
 
 static TimerHandle_t s_wdt_uart;
 static TimerHandle_t s_wdt_ticframe;
-static EventGroupHandle_t s_to_ticled;
-static QueueHandle_t s_to_oled;
+
 
 // bits elementaire de statut
 #define BIT_SIGNAL_HISTORIQUE  BIT0
@@ -56,7 +55,7 @@ void update_status_tic()
         default:
             msg = STATUS_ERROR;   // cannot have both modes 
     }
-    oled_update( s_to_oled, DISPLAY_TIC_STATUS, msg );
+    oled_update( DISPLAY_TIC_STATUS, msg );
 }
 
 
@@ -84,7 +83,7 @@ void status_rcv_uart( tic_mode_t mode, TickType_t next_before )
     }
     xTimerReset( s_wdt_uart, 0);
 
-    ticled_blink_short( s_to_ticled );
+    ticled_blink_short();
 
     switch( mode )
     {
@@ -110,7 +109,7 @@ void status_rcv_tic_frame( TickType_t next_before)
     }
     xTimerReset( s_wdt_ticframe, 0 );
 
-    ticled_blink_long( s_to_ticled );
+    ticled_blink_long();
     xEventGroupSetBits( s_status_bits, BIT_TELEINFO_DATA );
     update_status_tic();
 }
@@ -118,7 +117,7 @@ void status_rcv_tic_frame( TickType_t next_before)
 
 void status_wifi_sta_connecting()
 {
-    oled_update( s_to_oled, DISPLAY_WIFI_STATUS, STATUS_CONNECTING );
+    oled_update( DISPLAY_WIFI_STATUS, STATUS_CONNECTING );
 
     // disbale upper layers 
     //status_wifi_lost_ip();   // clear oled_ip et oled_mqtt
@@ -128,7 +127,7 @@ void status_wifi_sta_connecting()
 void status_wifi_sta_connected( const char *ssid )
 {
     const char *txt = ( ssid == NULL ) ? STATUS_CONNECTED : ssid;
-    oled_update( s_to_oled, DISPLAY_WIFI_STATUS, txt );
+    oled_update( DISPLAY_WIFI_STATUS, txt );
     //status_wifi_lost_ip();   // clear oled_ip et oled_mqtt
 }
 
@@ -137,26 +136,26 @@ void status_wifi_got_ip( esp_netif_ip_info_t *ip_info )
 {
     char buf[32];
     snprintf( buf, sizeof(buf), IPSTR, IP2STR( &(ip_info->ip) ) );
-    oled_update( s_to_oled, DISPLAY_IP_ADDR, buf );
+    oled_update( DISPLAY_IP_ADDR, buf );
     // status_mqtt_disconnected();
 }
 
 void status_wifi_lost_ip()
 {
-    oled_update( s_to_oled, DISPLAY_IP_ADDR, "--" );
+    oled_update( DISPLAY_IP_ADDR, "--" );
     // status_mqtt_disconnected(); 
 }
 
 
 void status_mqtt_update( const char *status )
 {
-    oled_update( s_to_oled, DISPLAY_MQTT_STATUS, status );
+    oled_update( DISPLAY_MQTT_STATUS, status );
 }
 
 
 void status_clock_update( const char* time_str)
 {
-    oled_update( s_to_oled, DISPLAY_CLOCK, time_str);
+    oled_update( DISPLAY_CLOCK, time_str);
 }
 
 
@@ -164,16 +163,18 @@ void status_papp_update( uint32_t papp )
 {
     char buf[16];
     snprintf( buf, sizeof(buf), "%lu W", papp );
-    oled_update( s_to_oled, DISPLAY_PAPP, buf );
+    oled_update( DISPLAY_PAPP, buf );
 }
 
 
-void status_init( QueueHandle_t to_oled, EventGroupHandle_t to_ticled )
+BaseType_t status_init()
 {
-    s_to_oled = to_oled;
-    s_to_ticled = to_ticled;
-
     s_status_bits = xEventGroupCreate();
+    if( s_status_bits == NULL )
+    {
+        ESP_LOGE( TAG, "xEventGroup() failed" );
+        return pdFALSE;
+    }
 
     // timers d'expiration du signal serie et du decodeur TIC
     s_wdt_uart = xTimerCreate( "uart_timer", 
@@ -189,4 +190,5 @@ void status_init( QueueHandle_t to_oled, EventGroupHandle_t to_ticled )
                                     NULL,
                                     uart_timeout );
     xTimerStart( s_wdt_ticframe, 1 );
+    return pdTRUE;
 }

@@ -26,20 +26,25 @@
 
 static const char *TAG = "oled_task";
 
+
+static QueueHandle_t s_to_oled;
+
 /*** 
  * oled_update est appelé depuis les autres tâches pour envoyer des infos à l'afficheur
  */
 extern "C"
-void oled_update( QueueHandle_t to_oled, display_event_type_t type, const char* txt )
+BaseType_t oled_update( display_event_type_t type, const char* txt )
 {
     display_event_t evt;
     evt.info = type;
 
     strncpy( evt.txt, txt, sizeof( evt.txt ) );
-    if( xQueueSend( to_oled, &evt, 0 ) != pdTRUE ) 
+    if( xQueueSend( s_to_oled, &evt, 0 ) != pdTRUE ) 
     {
         ESP_LOGI( TAG, "oled_update() echec. Probablement queue pleine. Type %#x '%s'", evt.info, evt.txt );
+        return pdFALSE;
     } 
+    return pdTRUE;
 }
 
 const SPlatformI2cConfig tic_default_display_config = { 
@@ -50,11 +55,11 @@ const SPlatformI2cConfig tic_default_display_config = {
     .frequency = 0 
 };
 
-
+/*
 typedef struct oled_task_param_s {
     QueueHandle_t to_oled;
 } oled_task_param_t;
-
+*/
 
 const char *LABEL_UART = "UART";
 const char *LABEL_TIC  = " TIC";
@@ -105,7 +110,7 @@ void DisplayLine::set_info( const char *info )
     m_newline[m_length] = '\0';
 }
 
- 
+
 const char* DisplayLine::get_txt()
 {
     if( strncmp( m_oldline, m_newline, m_length ) == 0 )
@@ -226,26 +231,35 @@ void TicDisplay::loop( QueueHandle_t queue )
 
 static void oled_task(void *pvParams)
 {
-    oled_task_param_t *task_params = (oled_task_param_t *)pvParams;
+    //oled_task_param_t *task_params = (oled_task_param_t *)pvParams;
     TicDisplay display( OLED_GPIO_RST, tic_default_display_config );
     display.setup();
-    display.loop( task_params->to_oled );
+    display.loop( s_to_oled );
 }
 
 
-extern "C" void oled_task_start( QueueHandle_t to_oled )
+extern "C" BaseType_t oled_task_start( )
 {
     esp_log_level_set( TAG, ESP_LOG_INFO );
-    ESP_LOGI( TAG, "oled_task_start()" );
+    ESP_LOGD( TAG, "oled_task_start()" );
 
-    oled_task_param_t *task_params = (oled_task_param_t *)malloc( sizeof(oled_task_param_t) );
-    if( task_params == NULL )
+    // Reception des infos à afficher sur l'écran OLED
+    s_to_oled = xQueueCreate( 50, sizeof( display_event_t ) );
+    if( s_to_oled == NULL )
     {
-        ESP_LOGE( TAG, "malloc() failed" );
-        return;
+        ESP_LOGE( TAG, "xCreateQueue() failed" );
+        return pdFALSE;
     }
-    task_params->to_oled = to_oled;
-    xTaskCreatePinnedToCore( oled_task, "oled_task", 8192, task_params, 1, NULL, ARDUINO_RUNNING_CORE );
+
+    //oled_task_param_t *task_params = (oled_task_param_t *)malloc( sizeof(oled_task_param_t) );
+    //if( task_params == NULL )
+    //{
+    //    ESP_LOGE( TAG, "malloc() failed" );
+    //    return pdFALSE;
+    // }
+    //task_params->to_oled = to_oled;
+    xTaskCreatePinnedToCore( oled_task, "oled_task", 8192, NULL, 1, NULL, ARDUINO_RUNNING_CORE );
+    return pdTRUE;
 }
 
 

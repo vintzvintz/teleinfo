@@ -3,7 +3,6 @@ extern "C" {
 #endif
 
 
-
 typedef enum display_event_type_e {
     DISPLAY_TIC_STATUS =0,
     DISPLAY_WIFI_STATUS,
@@ -24,9 +23,8 @@ typedef struct display_event_s {
 } display_event_t;
 
 
-void oled_task_start( QueueHandle_t to_oled );
-void oled_demo_task_start(void);
-void oled_update( QueueHandle_t to_oled, display_event_type_t type, const char* txt );
+BaseType_t oled_task_start( );
+BaseType_t oled_update( display_event_type_t type, const char* txt );
 
 #ifdef __cplusplus
 }       // extern "C" 

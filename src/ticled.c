@@ -13,36 +13,33 @@
 
 static const char *TAG = "led_blink";
 
-
-/*
- * Contrôle de la led du PtiInfo avec un EventGroup
- */
+// Contrôle de la led du PtiInfo avec un EventGroup
+EventGroupHandle_t s_to_ticled;
 #define TIC_BIT_COURT    ( 1 << 0 )
 #define TIC_BIT_LONG     ( 1 << 1 )
 
-
+/*
 typedef struct led_task_params_s {
     EventGroupHandle_t blink_events;
 } led_task_params_t;
+*/
 
-
-
-void ticled_blink_short(EventGroupHandle_t to_ticled ) 
+void ticled_blink_short( ) 
 {
-     xEventGroupSetBits( to_ticled, TIC_BIT_COURT );
+     xEventGroupSetBits( s_to_ticled, TIC_BIT_COURT );
 }
 
-void ticled_blink_long(EventGroupHandle_t to_ticled ) 
+void ticled_blink_long( ) 
 {
     // blink led at each UART receive event
-    xEventGroupSetBits( to_ticled, TIC_BIT_LONG );
+    xEventGroupSetBits( s_to_ticled, TIC_BIT_LONG );
 }
 
 
 static void ticled_task( void *pvParams )
 {
-    led_task_params_t *params = (led_task_params_t *)pvParams;
-
+    // led_task_params_t *params = (led_task_params_t *)pvParams;
+    
     gpio_set_direction( TIC_GPIO_LED, GPIO_MODE_OUTPUT );
     gpio_set_level( TIC_GPIO_LED, 0 );
 
@@ -53,7 +50,7 @@ static void ticled_task( void *pvParams )
         // Wait a maximum of 100ms for either bit 0 or bit 4 to be set within
         // the event group.  Clear the bits before exiting.
         uxBits = xEventGroupWaitBits(
-                    params->blink_events,        // The event group being tested.
+                    s_to_ticled,        // The event group being tested.
                     TIC_BIT_COURT | TIC_BIT_LONG,              // The bits within the event group to wait for.
                     pdTRUE,         // BITs should be cleared before returning.
                     pdFALSE,        // Don't wait for both bits, either bit will do.
@@ -79,18 +76,24 @@ static void ticled_task( void *pvParams )
     }
 }
 
-void ticled_start_task( EventGroupHandle_t blink_events )
+BaseType_t ticled_task_start()
 {
-    led_task_params_t *params = malloc( sizeof(led_task_params_t) );
-    if( params ==NULL )
+    s_to_ticled = xEventGroupCreate();
+    if( s_to_ticled == NULL )
     {
-        ESP_LOGE( TAG, "Malloc failed" );
-        return;
+        ESP_LOGE( TAG, "xCreateQueue() failed" );
+        return pdFALSE;
     }
 
-    params->blink_events = blink_events;
+    //led_task_params_t *params = malloc( sizeof(led_task_params_t) );
+    //if( params ==NULL )
+    ///{
+    //    ESP_LOGE( TAG, "Malloc failed" );
+    //    return;
+    //}
+    // params->blink_events = blink_events;
 
-    xTaskCreate(ticled_task, "ticled", 4096, params, 1, NULL);
+    return xTaskCreate(ticled_task, "ticled", 4096, NULL, 1, NULL);
 
 }
 

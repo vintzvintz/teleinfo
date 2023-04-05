@@ -1,6 +1,5 @@
 #include "esp_netif.h"
-#include "freertos/event_groups.h"
-#include "freertos/queue.h"
+
 
 #define STATUS_UART_DEFAULT_TIMEOUT       500     // ms
 #define STATUS_TICFRAME_DEFAUT_TIMEOUT   2000    // ms
@@ -12,8 +11,8 @@ typedef enum {
     TIC_MODE_STANDARD,
 } tic_mode_t;
 
-// pour initialiser les pointeurs vers les périphériques
-void status_init( QueueHandle_t to_oled, EventGroupHandle_t to_ticled );
+// initialise les timers d'état des liaisons
+BaseType_t status_init();
 
 // pour notifier la réception de données par l'UART
 void status_rcv_uart( tic_mode_t mode, TickType_t next_before );
