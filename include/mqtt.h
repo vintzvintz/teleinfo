@@ -1,7 +1,8 @@
 
+#include "freertos/FreeRTOS.h"
+#include "errors.h"
 
 #define MQTT_TOPIC_FORMAT "home/elec/%s"
-
 
 #define MQTT_TOPIC_BUFFER_SIZE 128
 #define MQTT_PAYLOAD_BUFFER_SIZE 1500

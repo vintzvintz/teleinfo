@@ -3,7 +3,7 @@
 /* Intellisense bullshit */
 //#undef __linux__
 
-#define LWIP_DEBUG 1
+//#define LWIP_DEBUG 1
 
 
 #include <stdio.h>
@@ -42,20 +42,16 @@ void nvs_initialise(void)
 void app_main(void)
 {
     esp_log_level_set(TAG, ESP_LOG_DEBUG);
-
     esp_log_level_set("wifi", ESP_LOG_WARN);
     esp_log_level_set("wifi_init", ESP_LOG_WARN);
-
 
     ESP_LOGI(TAG, "[APP] Startup..");
     ESP_LOGI(TAG, "[APP] Free memory: %lu bytes", esp_get_free_heap_size());
     ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
 
-
     status_init();
     nvs_initialise();    // required for wifi driver
     wifi_task_start();
-
 
 //    start_bouton_task();
     oled_task_start();
