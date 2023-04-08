@@ -11,6 +11,7 @@ set(srcs
     "status.c"
     "decode.c"
     "process.c"
+    "puissance.c"
     "flags.c"
     "ticled.c"
     "uart_events.c"

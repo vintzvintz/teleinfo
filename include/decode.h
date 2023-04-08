@@ -39,6 +39,7 @@ uint32_t tic_dataset_count( tic_dataset_t *dataset );
 uint32_t tic_dataset_size( tic_dataset_t *dataset );
 void tic_dataset_free( tic_dataset_t *dataset );
 tic_dataset_t * tic_dataset_sort(tic_dataset_t *ds);
+const tic_dataset_t* tic_dataset_find( const tic_dataset_t *ds, const char *etiquette );
 
 /* reception des bytes depuis uart_task */
 size_t decode_receive_bytes( void *buf , size_t length );

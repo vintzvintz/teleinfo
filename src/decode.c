@@ -173,6 +173,20 @@ tic_dataset_t * tic_dataset_sort(tic_dataset_t *ds)
 }
 
 
+const tic_dataset_t* tic_dataset_find( const tic_dataset_t *ds, const char *etiquette )
+{
+    while( ds != NULL )
+    {
+        if( strncmp( ds->etiquette, etiquette, TIC_SIZE_ETIQUETTE ) == 0 )
+        {
+            return ds;
+        }
+        ds = ds->next;
+    }
+    return NULL;
+}
+
+
 static void reset_decoder( tic_decoder_t *td )
 {
     //ESP_LOGD( TAG, "reset_decoder()");
