@@ -19,7 +19,6 @@
 
 #include "clock.h"
 #include "status.h"
-#include "wifi.h"
 
 static const char *TAG = "timesync";
 
@@ -27,7 +26,7 @@ EventGroupHandle_t s_clock_evt;
 
 #define SYNC_CLOCK_BIT       BIT0
 #define MAX_RESYNC_INTERVAL  5
-#define TZSTRING_CET         "CET-1CEST,M3.5.0/2,M10.5.0/3"    // [Europe/Paris]
+//#define TZSTRING_CET         "CET-1CEST,M3.5.0/2,M10.5.0/3"    // [Europe/Paris]
 
 
 void clock_lost()
@@ -92,8 +91,8 @@ void clock_task_start( )
     // initialize SNTP client
     sntp_setoperatingmode(SNTP_OPMODE_POLL);
     sntp_setservername(0, CLOCK_SERVER_NAME );
-    setenv( "TZ", TZSTRING_CET, 1);
-    tzset();
+    //setenv( "TZ", TZSTRING_CET, 1);
+    //tzset();
     sntp_set_time_sync_notification_cb( sntp_callback );
     sntp_init();
 

@@ -8,6 +8,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include "freertos/FreeRTOS.h"
 #include "nvs_flash.h"
 #include "esp_log.h"
@@ -22,6 +23,9 @@
 #include "clock.h"
 #include "status.h"
 #include "bouton.h"
+
+
+#define TZSTRING_CET         "CET-1CEST,M3.5.0/2,M10.5.0/3"    // [Europe/Paris]
 
 
 static const char *TAG = "main_app";
@@ -49,16 +53,24 @@ void app_main(void)
     ESP_LOGI(TAG, "[APP] Free memory: %lu bytes", esp_get_free_heap_size());
     ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
 
-    status_init();
-    nvs_initialise();    // required for wifi driver
-    wifi_task_start();
+    //status_init();
+    //nvs_initialise();    // required for wifi driver
+    //wifi_task_start();
+
+
+    setenv( "TZ", TZSTRING_CET, 1);
+    tzset();
 
 //    start_bouton_task();
-    oled_task_start();
-    ticled_task_start();
-    uart_task_start();
-    tic_decode_task_start();
+    //oled_task_start();
+    //ticled_task_start();
+    //uart_task_start();
+    //tic_decode_task_start();
     process_task_start();
-    mqtt_task_start();
-    clock_task_start();
+    //mqtt_task_start();
+    //clock_task_start();
 }
+
+
+// sans tzset() process.c: time_t t = 1683560532
+// avec tzset() process.c: time_t t = 1683553332
