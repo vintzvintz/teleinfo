@@ -24,8 +24,9 @@ static const char *TAG = "process.c";
 #define TIC_LAST_POINTS_CNT  10
 
 //static const char *LABEL_ADCO = "ADCO";
-static const char *LABEL_ID_DEVICE = "ADSC";
-
+static const char *LABEL_DEVICE_ID = "ADSC";
+static const char *LABEL_ENERGIE_ACTIVE_TOTALE = "EAST";
+static const char *LABEL_HORODATE = "DATE";
 
 static QueueHandle_t s_to_process = NULL;
 /*
@@ -39,18 +40,67 @@ typedef struct process_task_param_s {
 typedef struct point_east_s {
     time_t ts;      // timestamp du point
     int32_t east;                       // index d'energie active soutiree totale du compteur
-} point_east_t;
+} east_point_t;
 
 
 // conserve les derniers points reçus
-static point_east_t s_east_rb[TIC_LAST_POINTS_CNT];    // ring buffer
+static east_point_t s_east_rb[TIC_LAST_POINTS_CNT];    // ring buffer
 static int8_t s_east_current;
 
 
 static void init_east_rb()
 {
-    memset( &s_east_rb, 0, TIC_LAST_POINTS_CNT*sizeof(point_east_t));
+    memset( &s_east_rb, 0, TIC_LAST_POINTS_CNT*sizeof(east_point_t));
     s_east_current = 0;
+}
+
+// recupere un point dans le ring buffer
+// i=0 : le plus récent   
+//i=cnt : le plus ancien
+const east_point_t* get_east_point( int8_t i )
+{
+    int8_t idx = ( i + s_east_current ) % TIC_LAST_POINTS_CNT;
+    return &(s_east_rb[idx]);
+}
+
+// ajoute un nouveau point dans le ring buffer
+static void add_east_point( const east_point_t * pt )
+{
+    int8_t pos = (s_east_current - 1) % TIC_LAST_POINTS_CNT;   // les points sont stockés "à l'envers"
+    ESP_LOGD( TAG, "add_east_point() s_east_current=%"PRIi8" pos=%"PRIi8" ts=%"PRIi64" east=%"PRIi32, s_east_current, pos, pt->ts, pt->east );
+    s_east_rb[pos].east = pt->east;
+    s_east_rb[pos].ts = pt->ts;
+}
+
+
+int calcule_p_active ( uint8_t n )
+{
+
+    if( n<1 || n>TIC_LAST_POINTS_CNT)
+    {
+        ESP_LOGW( TAG, "calcule_p_active(%d) avec n invalide", n);
+        return -1;
+    }
+
+    const east_point_t *p0 = get_east_point( 0 );
+    const east_point_t *pN = get_east_point( n );
+
+    if( pN->east==0 || pN->ts==0 || p0->east==0 || p0->ts==0 )
+    {
+        ESP_LOGW( TAG, "calcule_p_active(%d) impossible, pas encore assez de points reçus", n);
+        return -1;
+    }
+
+    int32_t energie = pN->east - p0->east;
+    time_t duree = pN->ts - p0->ts;
+
+    if( duree == 0 )
+    {
+        ESP_LOGW( TAG, "calcule_p_active(%d) impossible : les deux index ont la même horodate)", n);
+        return -1;
+    }
+
+    return (3600*energie)/duree;    // energie est en Watt.heure, on veut des Watt.seconde
 }
 
 
@@ -153,7 +203,7 @@ static tic_error_t horodate_to_time_t( const char *horodate, time_t *unix_time)
 }
 
 
-static tic_error_t east_to_point( point_east_t *pt, const char *horodate, const char *east_index) 
+static tic_error_t east_to_point( east_point_t *pt, const char *horodate, const char *east_index) 
 {
     ESP_LOGD( TAG, "east_to_point() : horodate=%s index=%s", horodate, east_index );
     
@@ -176,36 +226,59 @@ static tic_error_t east_to_point( point_east_t *pt, const char *horodate, const 
 
     pt->ts = ts;
     pt->east = val;
-
-    ESP_LOGD( TAG, "east_to_point() : ts=%"PRIi64" east=%"PRIi32, pt->ts, pt->east );
+    // ESP_LOGD( TAG, "east_to_point() : ts=%"PRIi64" east=%"PRIi32, pt->ts, pt->east );
     return TIC_OK;
 }
 
 
-// recupere un point dans le ring buffer
-// i=0 : le plus récent   
-//i=cnt : le plus ancien
-const point_east_t* get_east_point( int8_t i )
+static const tic_dataset_t * cherche_ds( const tic_dataset_t *ds, const char *etiquette )
 {
-    int8_t idx = ( i + s_east_current ) % TIC_LAST_POINTS_CNT;
-    return &(s_east_rb[idx]);
+    while( ds != NULL )
+    {
+        if( strncmp( ds->etiquette, etiquette, TIC_SIZE_ETIQUETTE ) == 0 )
+        {
+            return ds;
+        }
+        ds = ds->next;
+    }
+    return NULL;
 }
 
-void add_east_point( const point_east_t * pt )
-{
-    int8_t next = (s_east_current - 1) % TIC_LAST_POINTS_CNT;   // position précédente
-    ESP_LOGD( TAG, "avant insertion s_east_last=%"PRIi8" next=%"PRIi8, s_east_current, next);
-    s_east_rb[next].east = pt->east;
-    s_east_rb[next].ts = pt->ts;
-}
 
+static tic_error_t historise_east( const tic_dataset_t *ds )
+{
+    east_point_t *pt = NULL;
+
+    const tic_dataset_t *ds_horodate = cherche_ds( ds, LABEL_HORODATE );
+    if( ds_horodate == NULL )
+    {
+        ESP_LOGE( TAG, "Donnee DATE manquante");
+        return TIC_ERR_MISSING_DATA;
+    }
+ 
+    const tic_dataset_t *ds_east_index = cherche_ds( ds, LABEL_ENERGIE_ACTIVE_TOTALE );
+    if( ds_east_index == NULL )
+    {
+        ESP_LOGE( TAG, "Donnee EAST manquante");
+        return TIC_ERR_MISSING_DATA;
+    }
+
+    tic_error_t err = east_to_point( pt, ds_horodate->horodate, ds_east_index->valeur );
+    if( err != TIC_OK )
+    {
+        return err;
+    }
+
+    add_east_point( pt );  // ne renvoie jamais d'erreur
+    return TIC_OK;
+}
 
 
 static tic_error_t datasets_to_topic (char *buf, size_t size, const tic_dataset_t *ds )
 {
     while( ds != NULL )
     {
-        if( strcmp( ds->etiquette, LABEL_ID_DEVICE ) == 0 )
+        if( strcmp( ds->etiquette, LABEL_DEVICE_ID ) == 0 )
         {
             snprintf( buf, size, MQTT_TOPIC_FORMAT, ds->valeur );
             ESP_LOGI( TAG , "Topic=%s", buf );
@@ -213,7 +286,7 @@ static tic_error_t datasets_to_topic (char *buf, size_t size, const tic_dataset_
         }
         ds = ds->next;
     }
-    ESP_LOGE( TAG, "Identifiant compteur %s absent", LABEL_ID_DEVICE );
+    ESP_LOGE( TAG, "Identifiant compteur %s absent", LABEL_DEVICE_ID );
     return TIC_ERR_MISSING_DATA;
 }
 
@@ -409,15 +482,11 @@ static tic_error_t build_mqtt_msg( mqtt_msg_t *msg, const tic_dataset_t *ds  )
 }
 
 
-
 static void process_task( void *pvParams )
 {
     ESP_LOGI( TAG, "process_task()");
 
     //process_task_param_t *params = (process_task_param_t *)pvParams;
-
-
-
 
     TickType_t max_ticks = TIC_PROCESS_TIMEOUT * 1000 / portTICK_PERIOD_MS; 
 //    tic_dataset_t *ds_last = NULL; 
@@ -427,7 +496,7 @@ static void process_task( void *pvParams )
 
     for(;;)
     {
-        tic_dataset_free( ds );    //libère les datasets reçus de  decode_task
+        tic_dataset_free( ds );    //libère les datasets reçus de decode_task
         ds = NULL;
 
         mqtt_msg_free( msg );        // libere les msg non-envoyés à mqtt_task
@@ -440,7 +509,9 @@ static void process_task( void *pvParams )
             ESP_LOGI( TAG, "Aucune trame téléinfo reçue depuis %d secondes", TIC_PROCESS_TIMEOUT );
             continue;
         }
-    
+
+        historise_east( ds );
+
         mqtt_msg_t *msg = mqtt_msg_alloc();
         if( msg == NULL)
         {
@@ -479,7 +550,7 @@ BaseType_t process_task_start( QueueHandle_t to_decoder, QueueHandle_t to_mqtt )
     esp_log_level_set( TAG, ESP_LOG_DEBUG );
 
     init_east_rb();
-
+/*
     tic_dataset_t ds_test = {
         .etiquette = "EAST",
         .horodate = "E220408232221",
@@ -495,6 +566,7 @@ BaseType_t process_task_start( QueueHandle_t to_decoder, QueueHandle_t to_mqtt )
         ESP_LOGD( TAG, "east_to_point erreur %d", err);
         return pdFALSE;
     }
+*/
 
     // reçoit les trames décodées par decode_task
     s_to_process = xQueueCreate( 5, sizeof( tic_dataset_t * ) );
