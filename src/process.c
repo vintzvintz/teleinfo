@@ -21,6 +21,7 @@
 
 static const char *TAG = "process.c";
 
+#define TIC_LAST_POINTS_CNT  10
 
 //static const char *LABEL_ADCO = "ADCO";
 static const char *LABEL_ID_DEVICE = "ADSC";
@@ -33,6 +34,172 @@ typedef struct process_task_param_s {
     QueueHandle_t to_mqtt;
 } process_task_param_t;
 */
+
+
+typedef struct point_east_s {
+    time_t ts;      // timestamp du point
+    int32_t east;                       // index d'energie active soutiree totale du compteur
+} point_east_t;
+
+
+// conserve les derniers points reçus
+static point_east_t s_east_rb[TIC_LAST_POINTS_CNT];    // ring buffer
+static int8_t s_east_current;
+
+
+static void init_east_rb()
+{
+    memset( &s_east_rb, 0, TIC_LAST_POINTS_CNT*sizeof(point_east_t));
+    s_east_current = 0;
+}
+
+
+#define TSFRAGMENT_BUFSIZE 8
+static tic_error_t tsfragment_to_int( const char *start, int read_len, int *val, int offset )
+{
+    char buf[TSFRAGMENT_BUFSIZE];
+    if( read_len >= TSFRAGMENT_BUFSIZE-1 )
+    {
+        ESP_LOGE( TAG, "overflow in tsfragment_to_int()" );
+        return TIC_ERR_OVERFLOW;
+    }
+
+    strncpy( buf, start, read_len );
+    buf[read_len]= '\0';
+
+    //ESP_LOGD( TAG, "strtol(%s)", buf );
+    char *end;
+    *val = strtol( buf, &end, 10);
+    if( end-buf != read_len)
+    {
+        ESP_LOGE( TAG, "erreur strtol() sur %s", buf);
+        return TIC_ERR_BAD_DATA;
+    }
+    *val += offset;
+//    ESP_LOGD( TAG, "val=%d", *val );
+    return TIC_OK;
+}
+
+
+static tic_error_t horodate_to_time_t( const char *horodate, time_t *unix_time)
+{
+    ESP_LOGD( TAG, "horodate_to_time_t(%s)", horodate  );
+/*
+    struct tm tm1 = { .tm_year=123, 
+                     .tm_mon=4,
+                     .tm_mday=8,
+                     .tm_hour=12,
+                     .tm_min=2,
+                     .tm_sec=8, 
+                     .tm_isdst=-1 };
+    time_t t = mktime( &tm1 );
+
+    ESP_LOGD( TAG, "time_t t = %"PRIi64, t);
+
+    struct tm timeinfo;
+    localtime_r( &t, &timeinfo );
+    strftime( timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S", &timeinfo );
+    ESP_LOGI( TAG, "local time %s", timebuf );
+*/
+
+    struct tm tm;
+
+    // utilise l'indication d'heure d'été reçue
+    switch( horodate[0] )      
+    {
+        case 'E':
+            tm.tm_isdst = 1;     // E = heure d'été
+            break;
+        case 'H':
+            tm.tm_isdst = 0;     // H = heure d'hiver
+            break;
+        default:
+            tm.tm_isdst = -1;
+    }
+
+    tic_error_t err= TIC_OK;
+
+    //   tm_year commence en 1900, la teleinfo commence en 2000
+    err = tsfragment_to_int( &(horodate[1]), 2, &tm.tm_year, 100 );
+    if( err != TIC_OK ) { return err; }
+
+    //   tm_mon 0->11   teleinfo = 1->12
+    err = tsfragment_to_int( &(horodate[3]), 2, &(tm.tm_mon), -1 );
+    if( err != TIC_OK ) { return err; }
+
+    err = tsfragment_to_int( &(horodate[5]), 2, &(tm.tm_mday), 0 );
+    if( err != TIC_OK ) { return err; }
+
+    err = tsfragment_to_int( &(horodate[7]), 2, &(tm.tm_hour), 0 );
+    if( err != TIC_OK ) { return err; }
+
+    err = tsfragment_to_int( &(horodate[9]), 2, &(tm.tm_min), 0 );
+    if( err != TIC_OK ) { return err; }
+
+    err = tsfragment_to_int( &(horodate[11]), 2, &(tm.tm_sec), 0 );
+    if( err != TIC_OK ) { return err; }
+
+    // pour le debug
+    char timebuf[60];
+    strftime( timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S", &tm );
+    ESP_LOGD( TAG, "horodate decodéee %s", timebuf );
+
+    // renvoie le timestamp unix sur le pointeur fourni
+    if( unix_time != NULL )
+    {
+        *unix_time = mktime( &tm );
+    }
+    return TIC_OK;
+}
+
+
+static tic_error_t east_to_point( point_east_t *pt, const char *horodate, const char *east_index) 
+{
+    ESP_LOGD( TAG, "east_to_point() : horodate=%s index=%s", horodate, east_index );
+    
+    // traite l'horodate
+    time_t ts;
+    tic_error_t err = horodate_to_time_t( horodate, &ts );
+    if( err != TIC_OK )
+    {
+        return err;
+    }
+
+    // traite l'index
+    char *end;
+    int val = strtol( east_index, &end, 10);
+    if( *end != '\0')
+    {
+        ESP_LOGE( TAG, "erreur strtol() sur %s", east_index );
+        return TIC_ERR_BAD_DATA;
+    }
+
+    pt->ts = ts;
+    pt->east = val;
+
+    ESP_LOGD( TAG, "east_to_point() : ts=%"PRIi64" east=%"PRIi32, pt->ts, pt->east );
+    return TIC_OK;
+}
+
+
+// recupere un point dans le ring buffer
+// i=0 : le plus récent   
+//i=cnt : le plus ancien
+const point_east_t* get_east_point( int8_t i )
+{
+    int8_t idx = ( i + s_east_current ) % TIC_LAST_POINTS_CNT;
+    return &(s_east_rb[idx]);
+}
+
+void add_east_point( const point_east_t * pt )
+{
+    int8_t next = (s_east_current - 1) % TIC_LAST_POINTS_CNT;   // position précédente
+    ESP_LOGD( TAG, "avant insertion s_east_last=%"PRIi8" next=%"PRIi8, s_east_current, next);
+    s_east_rb[next].east = pt->east;
+    s_east_rb[next].ts = pt->ts;
+}
+
+
 
 static tic_error_t datasets_to_topic (char *buf, size_t size, const tic_dataset_t *ds )
 {
@@ -310,6 +477,24 @@ tic_error_t process_receive_datasets( tic_dataset_t *ds )
 BaseType_t process_task_start( QueueHandle_t to_decoder, QueueHandle_t to_mqtt )
 {
     esp_log_level_set( TAG, ESP_LOG_DEBUG );
+
+    init_east_rb();
+
+    tic_dataset_t ds_test = {
+        .etiquette = "EAST",
+        .horodate = "E220408232221",
+        .valeur = "001254",
+    };
+
+    
+    point_east_t pt = {0};
+
+    tic_error_t err = east_to_point( &pt, ds_test.horodate, ds_test.valeur );
+    if( err != TIC_OK )
+    {
+        ESP_LOGD( TAG, "east_to_point erreur %d", err);
+        return pdFALSE;
+    }
 
     // reçoit les trames décodées par decode_task
     s_to_process = xQueueCreate( 5, sizeof( tic_dataset_t * ) );

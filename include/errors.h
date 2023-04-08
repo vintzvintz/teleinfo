@@ -10,6 +10,7 @@ typedef enum tic_error_enum {
     TIC_ERR_MEMORY,
     TIC_ERR_QUEUEFULL,
     TIC_ERR_UNKNOWN_DATA,
-    TIC_ERR_MISSING_DATA 
+    TIC_ERR_MISSING_DATA,
+    TIC_ERR_BAD_DATA,
 } tic_error_t;
 
