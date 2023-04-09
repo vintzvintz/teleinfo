@@ -23,13 +23,24 @@ static const char *TAG = "process.c";
 
 #define TIC_LAST_POINTS_CNT  10
 
-//static const char *LABEL_ADCO = "ADCO";
-static const char *LABEL_DEVICE_ID = "ADSC";
 
 static QueueHandle_t s_to_process = NULL;
 
 
-static tic_error_t datasets_to_topic (char *buf, size_t size, const dataset_t *ds )
+//static const char *LABEL_ADCO = "ADCO";
+static const char *LABEL_DEVICE_ID = "ADSC";
+
+//static const char *LABEL_PUISSANCE_APPARENTE = "PAPP";
+static const char *LABEL_PUISSANCE_APPARENTE = "SINSTS";
+
+static const char *FORMAT_ISO8601 = "%Y-%m-%dT%H:%M:%S%z";
+static const char *FORMAT_NUMERIC_SANS_HORODATE = "  \"%s\":{\"val\":%"PRIi32"}";
+static const char *FORMAT_NUMERIC_AVEC_HORODATE = "  \"%s\":{\"horodate\":%s \"val\":%"PRIi32"}";
+static const char *FORMAT_STRING_SANS_HORODATE = "  \"%s\":{\"val\":\"%s\"}";
+static const char *FORMAT_STRING_AVEC_HORODATE = "  \"%s\":{\"horodate\":%s \"val\":\"%s\"}";
+
+
+static tic_error_t set_topic (char *buf, size_t size, const dataset_t *ds )
 {
     while( ds != NULL )
     {
@@ -41,20 +52,16 @@ static tic_error_t datasets_to_topic (char *buf, size_t size, const dataset_t *d
         }
         ds = ds->next;
     }
-    ESP_LOGE( TAG, "Identifiant compteur %s absent", LABEL_DEVICE_ID );
+    ESP_LOGE( TAG, "Identifiant compteur '%s' absent", LABEL_DEVICE_ID );
     return TIC_ERR_MISSING_DATA;
 }
 
 
 // envoie, ou non, des donnes pour mettre à jour l'afficheur
-//static tic_error_t affiche_dataset( tic_decoder_t *td, const tic_dataset_t *ds )
-static tic_error_t affiche_dataset( const dataset_t *ds )
+static tic_error_t affiche_papp( const dataset_t *ds )
 {
-    
-    //if( strcmp( ds->etiquette, "PAPP" ) == 0 )
-    if( strcmp( ds->etiquette, "SINST" ) == 0 )
+    if( strcmp( ds->etiquette, LABEL_PUISSANCE_APPARENTE ) == 0 )
     {
-       // oled_update( td->to_oled, DISPLAY_PAPP, ds->valeur );
         uint32_t papp = strtol( ds->valeur, NULL, 10 );
         status_papp_update( papp );
     }
@@ -62,29 +69,37 @@ static tic_error_t affiche_dataset( const dataset_t *ds )
     return TIC_OK;
 }
 
-
- //static const char *FORMAT_STRING_SANS_HORODATE = "  {\"lbl\": \"%s\", \"val\": \"%s\" }";
-//static const char *FORMAT_STRING_AVEC_HORODATE = "  {\"lbl\": \"%s\", \"ts\": \"%s\", \"val\": \"%s\" }";
-//static const char *FORMAT_NUMERIC_SANS_HORODATE = "  {\"lbl\": \"%s\", \"val\": %d }";
-//static const char *FORMAT_NUMERIC_AVEC_HORODATE = "  {\"lbl\": \"%s\", \"ts\": \"%s\", \"val\": %d }";
-static const char *FORMAT_ISO8601 = "%Y-%m-%dT%H:%M:%S%z";
-
-static const char *FORMAT_STRING_SANS_HORODATE = "  \"%s\" : { \"val\":\"%s\" }";
-static const char *FORMAT_NUMERIC_SANS_HORODATE = "  \"%s\" : { \"val\":%d }";
-
-
 static size_t printf_ds( char *buf, size_t size, const dataset_t *ds )
 {
-    if( ds->flags & TIC_DS_NUMERIQUE )
+    // garde seulement les flags de format
+    tic_dataset_flags_t flags =  (ds->flags) & (TIC_DS_NUMERIQUE|TIC_DS_HAS_TIMESTAMP);
+    int32_t val_int=-1;
+
+    // convertit en int pour un formattage printf correct 
+    if( flags & TIC_DS_NUMERIQUE )
     {
-        // formatte la valeur numerique avec ou sans horodate
-        uint32_t val = strtol( ds->valeur, NULL, 10 );
-        return snprintf( buf, size, FORMAT_NUMERIC_SANS_HORODATE, ds->etiquette, val);
+        // TODO : check erreurs de conversion
+        val_int = strtol( ds->valeur, NULL, 10 );
     }
-    else
+
+    size_t nb_wr=0;
+    switch( flags)
     {
-        return snprintf( buf, size, FORMAT_STRING_SANS_HORODATE, ds->etiquette, ds->valeur);
+        case 0:
+            nb_wr = snprintf( buf, size, FORMAT_STRING_SANS_HORODATE, ds->etiquette, ds->valeur);
+            break;
+        case TIC_DS_HAS_TIMESTAMP:
+            nb_wr = snprintf( buf, size, FORMAT_STRING_AVEC_HORODATE, ds->etiquette, ds->horodate, ds->valeur);
+            break;
+        case TIC_DS_NUMERIQUE:
+            nb_wr = snprintf( buf, size, FORMAT_NUMERIC_SANS_HORODATE, ds->etiquette, val_int);
+            break;
+        case TIC_DS_NUMERIQUE|TIC_DS_HAS_TIMESTAMP:
+            nb_wr = snprintf( buf, size, FORMAT_NUMERIC_AVEC_HORODATE, ds->etiquette, ds->horodate, val_int);
+            break;
     }
+
+   return nb_wr;
 }
 
 
@@ -96,37 +111,7 @@ static size_t get_time_iso8601( char *buf, size_t size )
     return strftime( buf, size, FORMAT_ISO8601, &timeinfo );
 }
 
-
-static dataset_t *filtre_datasets( dataset_t *ds )
-{
-    ESP_LOGD( TAG, "filtre_datasets()" );
-    dataset_t *head = NULL; 
-    dataset_t *tail = NULL;   // pointeur sur la queue pour conserver l'ordre
-    while( ds != NULL )
-    {
-        dataset_t *tmp_next = ds->next;
-        ds->next = NULL;
-
-        if( ds->flags & TIC_DS_PUBLISHED )
-        {
-            if( !head )
-                head = ds;
-
-            if( !tail )
-                tail = ds;
-
-            tail->next = ds;
-            tail = ds;
-        }
-        else
-        {
-            dataset_free(ds);
-        }
-        ds = tmp_next;
-    }
-    return head;
-}
-
+/*
 // compare deux trames - les datasets doivent être triés !
 int compare_datasets( const dataset_t *ds1, const dataset_t *ds2 )
 {
@@ -149,7 +134,7 @@ int compare_datasets( const dataset_t *ds1, const dataset_t *ds2 )
 
     return 0;
 }
-
+*/
 
 static tic_error_t datasets_to_json( char *buf, size_t size, const dataset_t *ds )
 {
@@ -165,7 +150,6 @@ static tic_error_t datasets_to_json( char *buf, size_t size, const dataset_t *ds
         // ignore les etiquettes non exportées 
         if( (ds->flags & TIC_DS_PUBLISHED) == 0  )
         {
-            ESP_LOGE( TAG, "Probleme avec le filtrage en amont de datasets_to_json()");
             ds = ds->next;
             continue;
         }
@@ -198,48 +182,43 @@ static tic_error_t datasets_to_json( char *buf, size_t size, const dataset_t *ds
     return TIC_OK;
 }
 
+
+static tic_error_t set_payload( char *buf, size_t size, const dataset_t *ds )
+{
+    return datasets_to_json( buf, size, ds );
+}
+
 static tic_error_t build_mqtt_msg( mqtt_msg_t *msg, const dataset_t *ds  )
 {
 
     ESP_LOGD( TAG, "build_mqtt_msg() msg=%p ds=%p", msg, ds);
-if(0) {
-    affiche_dataset( ds );
-    datasets_to_topic( NULL, 0, ds );
-    filtre_datasets( NULL );
-    datasets_to_json( NULL, 0, ds );
-}
-    /*
-    char *json_buffer = malloc(TIC_PROCESS_JSON_BUFFER_SIZE);
-    char *topic_buffer = malloc(TIC_PROCESS_TOPIC_BUFFER_SIZE);
 
-    if( datasets_to_topic (topic_buffer, MQTT_TOPIC_BUFFER_SIZE, ds_new ) != MQTT_OK )
+//     Pour tester
+//    strncpy( msg->topic, "weshTopic", MQTT_TOPIC_BUFFER_SIZE );
+//    strncpy( msg->payload, "weshPayload", MQTT_PAYLOAD_BUFFER_SIZE );
+
+    tic_error_t err;
+
+    err = affiche_papp( ds );
+    //ignore erreur
+
+    err = set_topic( msg->topic, MQTT_TOPIC_BUFFER_SIZE, ds );
+    if( err != TIC_OK )
     {
-        continue;
+        ESP_LOGD( TAG, "Erreur lors de la création du topic MQTT");
+        return err;
     }
 
-    ds_new = filtre_datasets( ds_new );
-
-    if( compare_datasets( ds_last, ds_new ) != 0 )
+    err = set_payload( msg->payload, MQTT_PAYLOAD_BUFFER_SIZE, ds );
+    if( err != TIC_OK )
     {
-        // les donnnees ont changé, on les garde et on les publie
-        tic_dataset_free( ds_last );
-        ds_last = ds_new;
-        ds_new = NULL;
+        ESP_LOGD( TAG, "Erreur lors de la création du payload MQTT");
+        return err;
     }
-    else
-    {
-        //ESP_LOGD( TAG, "Données non modifiées donc non publiées");
-        continue;
-    }
-
-    if( datasets_to_json( json_buffer, MQTT_JSON_BUFFER_SIZE, ds_last ) != MQTT_OK )
-    {
-        continue;
-    }
-
-*/
     return TIC_OK;
+
 }
+
 
 
 static void process_task( void *pvParams )
@@ -277,12 +256,13 @@ static void process_task( void *pvParams )
         // envoie la trame au module de calcul de puissance active
         puissance_new_trame( ds );
 
+        puissance_debug();
+
         msg = mqtt_msg_alloc();
         if( msg == NULL)
         {
             continue;   // erreur logguee dans mqtt_alloc_msg()
         }
-        continue;
         
         if( build_mqtt_msg( msg, ds ) != TIC_OK)
         {
@@ -290,14 +270,10 @@ static void process_task( void *pvParams )
             continue;    // erreur logguee dans build_mqtt_msg()
         }
 
-        //ESP_LOGD( TAG, "END process_task loop ds=%p msg=%p ...", ds, msg );
-
-/*
         if( mqtt_receive_msg(msg) == TIC_OK )
         {
             msg = NULL;   // sera liberé par mqtt_task;
         }
-    */
     }
     ESP_LOGE( TAG, "fatal: process_task exited" );
     vTaskDelete(NULL);
@@ -330,23 +306,6 @@ BaseType_t process_task_start( QueueHandle_t to_decoder, QueueHandle_t to_mqtt )
     esp_log_level_set( "puissance.c", ESP_LOG_DEBUG );
 
     puissance_init();
-/*
-    tic_dataset_t ds_test = {
-        .etiquette = "EAST",
-        .horodate = "E220408232221",
-        .valeur = "001254",
-    };
-
-    
-    point_east_t pt = {0};
-
-    tic_error_t err = east_to_point( &pt, ds_test.horodate, ds_test.valeur );
-    if( err != TIC_OK )
-    {
-        ESP_LOGD( TAG, "east_to_point erreur %d", err);
-        return pdFALSE;
-    }
-*/
 
     // reçoit les trames décodées par decode_task
     s_to_process = xQueueCreate( 5, sizeof( dataset_t * ) );

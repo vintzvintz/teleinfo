@@ -5,4 +5,6 @@
 
 void puissance_init();
 tic_error_t puissance_new_trame( const dataset_t *ds );
-int puissance_get( uint8_t n );
+int32_t puissance_get( uint8_t n );
+
+void puissance_debug();

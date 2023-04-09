@@ -55,7 +55,7 @@ static void add_east_point( const east_point_t * pt )
 }
 
 
-int puissance_get ( uint8_t n )
+int32_t puissance_get ( uint8_t n )
 {
 
     if( n<1 || n>TIC_LAST_POINTS_CNT)
@@ -69,7 +69,7 @@ int puissance_get ( uint8_t n )
 
     if( pN->east==0 || pN->ts==0 || p0->east==0 || p0->ts==0 )
     {
-        ESP_LOGW( TAG, "calcule_p_active(%d) impossible, pas encore assez de points reçus", n);
+        ESP_LOGW( TAG, "p_active(%d) indisponible : pas assez de points", n);
         return -1;
     }
 
@@ -78,7 +78,7 @@ int puissance_get ( uint8_t n )
 
     if( duree == 0 )
     {
-        ESP_LOGW( TAG, "calcule_p_active(%d) impossible : les deux index ont la même horodate)", n);
+        ESP_LOGW( TAG, "p_active(%d) indisponible : deux index avec horodate identique", n);
         return -1;
     }
 
@@ -262,4 +262,20 @@ tic_error_t puissance_new_trame( const dataset_t *ds )
     add_east_point( &pt );  // ne renvoie jamais d'erreur
     ESP_LOGD( TAG, "trame ajoutée EAST=%"PRIi32, pt.east );
     return TIC_OK;
+}
+
+
+
+void puissance_debug()
+{
+    uint8_t i;
+    int32_t p_active;
+    for( i=1; i< TIC_LAST_POINTS_CNT; i++ )
+    {
+        p_active = puissance_get(i);
+        if( p_active >=0 )
+        {
+            ESP_LOGD( TAG,"Puissance active sur %d points = %"PRIi32, i, p_active);
+        }
+    }
 }
