@@ -7,9 +7,9 @@
 
 
 #include "errors.h"
+#include "dataset.h"
 #include "decode.h"
 #include "process.h"
-#include "flags.h"
 #include "status.h"
 #include "ticled.h"
 
@@ -42,14 +42,15 @@ typedef struct tic_taskdecode_params_s {
 } tic_taskdecode_params_t;
 */
 
-StreamBufferHandle_t s_to_decoder;
+static StreamBufferHandle_t s_to_decoder = NULL;
+
 
 // tic_frame_s contient les données d'une trame en cours de réception
 typedef struct tic_decoder_s {
     
     // etat de la frame complète
     uint8_t stx_received;
-    tic_dataset_t *datasets;         // linked list des datasets complets reçus
+    dataset_t *datasets;         // linked list des datasets complets reçus
 
     // buffers pour le dataset en cours de reception
     tic_char_t buf0[TIC_SIZE_BUF0];   // etiquette
@@ -63,147 +64,23 @@ typedef struct tic_decoder_s {
 } tic_decoder_t;
 
 
-uint32_t tic_dataset_count( tic_dataset_t *dataset )
-{
-    uint32_t nb = 0;
-    while ( dataset != NULL )
-    {
-        nb++;
-        dataset = dataset->next;
-    }
-    return nb;
-}
-
-uint32_t tic_dataset_size( tic_dataset_t *dataset )
-{
-    uint32_t size = 0;
-    while ( dataset != NULL )
-    {
-        size += strlen( dataset->etiquette) + 1;    // 1 separator
-        size += strlen( dataset->horodate) + 1;     // 1 separator
-        size += strlen( dataset->valeur) + 1;       // '\n' ou '\0'
-        dataset = dataset->next;
-    }
-    return size;
-}
-
-tic_error_t tic_dataset_print( tic_dataset_t *ds )
-{
-    // ESP_LOGD( TAG, "print_datasets()");
-    char flags_str[3];
-    while( ds != NULL )
-    {
-        flags_str[0]= '.';
-        flags_str[1]= '.';
-        flags_str[2]=0;    // null-terminated
-        if( ds->flags & TIC_DS_PUBLISHED )
-        {
-            flags_str[0]= ( ds->flags & TIC_DS_NUMERIQUE ) ? 'N' : 'S';
-            if( ds->flags & TIC_DS_HAS_TIMESTAMP )
-                flags_str[1]= 'H';
-        }
-        ESP_LOGD( TAG, "%8.8s %s %s %s", ds->etiquette, flags_str, ds->horodate, ds->valeur );
-        ds = ds->next;
-    }
-    return TIC_OK;
-}
-
-void tic_dataset_free( tic_dataset_t *ds )
-{
-    while ( ds != NULL )
-    {
-        tic_dataset_t *tmp = ds;
-        ds = ds->next;
-        free( tmp );
-    }
-}
-
-
-static tic_dataset_t* insert_sort( tic_dataset_t *sorted, tic_dataset_t *ds)
-{
-    assert( ds != NULL );           // l'insertion de NULL est invalide
-    assert( ds->next == NULL );     // ds doit être un element isolé, le ptr sur le suivant doit rester chez l'appelant
-
-    tic_dataset_t *item = sorted;
-
-    while( item != NULL )
-    {
-        if( strcmp( ds->etiquette, item->etiquette ) < 0 )
-        {
-            // ds est plus petit que l'élément courant,
-            assert( item == sorted ); // impossible sauf pour le premier element de la liste triée
-            ds->next = item;          //  insere avant
-            sorted = ds;
-            break;
-        }
-        if ( (item->next == NULL) || (strcmp( ds->etiquette, item->next->etiquette ) <= 0 ) )
-        {
-            // ds est plus petit que l'élément suivant (ou pas d'élement suivant)
-            ds->next = item->next;    // insere après
-            item->next = ds;
-            break;
-        }
-        item = item->next;
-    }
-
-    if( sorted == NULL )
-    {
-        //ESP_LOGD( TAG, "la liste triée est vide, renvoie %s", ds->etiquette );
-        sorted = ds;
-    }
-    return sorted;
-}
-
-
-tic_dataset_t * tic_dataset_sort(tic_dataset_t *ds)
-{
-    tic_dataset_t * sorted = NULL;
-    tic_dataset_t * ds_next = NULL;
-
-    while( ds != NULL )
-    {
-        // copie le ptr vers l'item suivant car ds->next va être modifié lors de son insertion dans 'sorted'
-        ds_next = ds->next;
-        ds->next=NULL;
-
-        sorted = insert_sort( sorted, ds );
-        ds = ds_next;
-    }
-    return sorted;
-}
-
-
-const tic_dataset_t* tic_dataset_find( const tic_dataset_t *ds, const char *etiquette )
-{
-    while( ds != NULL )
-    {
-        if( strncmp( ds->etiquette, etiquette, TIC_SIZE_ETIQUETTE ) == 0 )
-        {
-            return ds;
-        }
-        ds = ds->next;
-    }
-    return NULL;
-}
-
-
 static void reset_decoder( tic_decoder_t *td )
 {
     //ESP_LOGD( TAG, "reset_decoder()");
     // desalloue les datasets
-    tic_dataset_free( td->datasets );
+    dataset_free( td->datasets );
 
     // met à 0 toutes les variables et buffers 
     memset( td, 0, sizeof(tic_decoder_t) );
 }
 
 
-static tic_error_t dataset_start( tic_decoder_t *td )
+static tic_error_t decode_dataset_start( tic_decoder_t *td )
 {
     //ESP_LOGD( TAG, "dataset_start()");
 
     // limite le nombre de datasets dans une trame
-    if( tic_dataset_count( td->datasets ) >= TIC_MAX_DATASETS )
+    if( dataset_count( td->datasets ) >= TIC_MAX_DATASETS )
     {
         ESP_LOGE(TAG, "Trop de datasets dans une trame (TIC_MAX_DATASETS=%d)", TIC_MAX_DATASETS );
         return TIC_ERR_OVERFLOW;
@@ -245,7 +122,7 @@ static void tic_decoder_debug_state( const tic_decoder_t *td )
 }
 */
 
-static tic_error_t dataset_end( tic_decoder_t *td ) {
+static tic_error_t decode_dataset_end( tic_decoder_t *td ) {
     //ESP_LOGD( TAG, "dataset_end()");
 
     tic_char_t *buf_etiquette, *buf_horodate, *buf_valeur, *buf_checksum;
@@ -297,7 +174,7 @@ static tic_error_t dataset_end( tic_decoder_t *td ) {
     }
 
     // alloue un nouveau dataset et copie les données 
-    tic_dataset_t *ds = (tic_dataset_t *) calloc(1, sizeof(tic_dataset_t));
+    dataset_t *ds = dataset_alloc();
     if (ds == NULL)
     {
         return TIC_ERR_MEMORY;
@@ -326,7 +203,7 @@ static tic_error_t dataset_end( tic_decoder_t *td ) {
     // ajoute le nouveau dataset à la liste
     //ds->next = td->datasets;
     //td->datasets = ds;
-    td->datasets = insert_sort( td->datasets, ds );
+    td->datasets = dataset_insert( td->datasets, ds );
 
     // mise à jour afficheur oled
     //affiche_dataset( td, ds );
@@ -335,7 +212,7 @@ static tic_error_t dataset_end( tic_decoder_t *td ) {
 }
 
 
-static tic_error_t frame_start( tic_decoder_t *td ) 
+static tic_error_t decode_frame_start( tic_decoder_t *td ) 
 {
     //ESP_LOGD( TAG, "frame_start()" );
     if( td->datasets != NULL || td->stx_received != 0 )
@@ -344,18 +221,17 @@ static tic_error_t frame_start( tic_decoder_t *td )
         return TIC_ERR_INVALID_CHAR;
     }
     td->stx_received = 1;
-    // todo -> creer un tache de surveillance de la memoire, ou tester les outils d'analyse ESP
-    ESP_LOGD( TAG, "Free memory: %lu bytes", esp_get_free_heap_size());
     return TIC_OK;
 }
 
 
-static tic_error_t frame_end( tic_decoder_t *td )
+static tic_error_t decode_frame_end( tic_decoder_t *td )
 {
     //td->datasets = tic_dataset_sort( td->datasets );
 
     // monitoring sur la console serie
-    tic_dataset_print( td->datasets );
+    //dataset_print( td->datasets );
+    ESP_LOGD( TAG, "Trame de %"PRIi32" datasets reçue", dataset_count(td->datasets) );
 
     // signale la réception de données UART
     status_rcv_tic_frame( 0 );
@@ -364,20 +240,22 @@ static tic_error_t frame_end( tic_decoder_t *td )
     //uint32_t size = tic_dataset_size( td->datasets );
     //ESP_LOGI( TAG, "Trame de %d datasets %d bytes (%p)", nb, size, td->datasets );
 
-    tic_error_t ret = TIC_OK;
-    BaseType_t send_ok = process_receive_datasets( td->datasets );
-    if( send_ok == pdTRUE )
+    tic_error_t err = process_receive_datasets( td->datasets );
+    if( err == TIC_OK )
     {
         // les datasets devront être free() par le recepteur ( process_task )
         td->datasets = NULL;
     }
     else
     {
-        ESP_LOGE( TAG, "Queue pleine : impossible d'envoyer la trame vers mqtt_client " );
-        ret = TIC_ERR_QUEUEFULL;
+        ESP_LOGE( TAG, "Queue pleine : impossible d'envoyer la trame vers process_task " );
     }
     reset_decoder( td );  // appelle tic_dataset_free( td->datasets )
-    return ret;
+
+    // todo -> creer un tache de surveillance de la memoire, ou tester les outils d'analyse ESP
+    ESP_LOGD( TAG, "Free memory: %lu bytes", esp_get_free_heap_size());
+
+    return err;
 }
 
 
@@ -454,19 +332,19 @@ static tic_error_t decode_char( tic_decoder_t *td, const tic_char_t ch )  {
     switch ( ch ) { 
         case CHAR_STX:
             // start of frame - reset state machine & buffers
-            ret = frame_start( td );
+            ret = decode_frame_start( td );
             break;
         case CHAR_ETX:
             // end of frame - send event or signal to antoher task 
-            ret = frame_end( td );
+            ret = decode_frame_end( td );
             break;
         case CHAR_LF:
             // start of a dataset - reset buffers and flags
-            ret = dataset_start( td );
+            ret = decode_dataset_start( td );
             break;
         case CHAR_CR:
             // end of dataset 
-            ret = dataset_end( td );
+            ret = decode_dataset_end( td );
             break;
         default:
             // autres caractères : label, timestamp, value ou separateur
@@ -490,8 +368,12 @@ static tic_error_t decode_raw_data( tic_decoder_t* td, const tic_char_t *buf, si
 
 void tic_decode_task( void *pvParams )
 {
+    ESP_LOGD( TAG, "tic_decode_task()" );
+    assert( s_to_decoder );
+
     // donnees internes du decodeur
-    tic_decoder_t *td = (tic_decoder_t *)malloc( sizeof( tic_decoder_t) );
+    tic_decoder_t *td = calloc(1, sizeof(tic_decoder_t));
+
     // buffer pour recevoir les données de la tache uart_events 
     tic_char_t *rx_buf = malloc( RX_BUF_SIZE );
     if( (td==NULL) || (rx_buf==NULL) )
@@ -517,6 +399,11 @@ void tic_decode_task( void *pvParams )
 // Appelé par la tâche uart_events.c pour envoyer les bytes reçus
 size_t decode_receive_bytes( void *buf , size_t length )
 {
+    if( s_to_decoder == NULL )
+    {
+        ESP_LOGD( TAG, "queue s_to_decoder pas initialisée" );
+        return 0;
+    }
     return xStreamBufferSend( s_to_decoder, buf, length, portMAX_DELAY);
 }
 

@@ -56,7 +56,7 @@ typedef struct wifi_loop_params_s {
     esp_event_handler_instance_t handler_instance_ip;
 } wifi_loop_params_t;
 
-static wifi_loop_params_t s_wifi_params;
+static wifi_loop_params_t s_wifi_params = {0};
 
 /*
 // pour synchronisation d'autres tâches

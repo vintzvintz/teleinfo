@@ -26,19 +26,23 @@ const char *STATUS_CONNECTING = "connecting...";
 const char *STATUS_CONNECTED  = "connected";
 const char *STATUS_ERROR = "error";
 
-static TimerHandle_t s_wdt_uart;
-static TimerHandle_t s_wdt_ticframe;
+static TimerHandle_t s_wdt_uart = NULL;
+static TimerHandle_t s_wdt_ticframe = NULL;
 
 
 // bits elementaire de statut
 #define BIT_SIGNAL_HISTORIQUE  BIT0
 #define BIT_SIGNAL_STANDARD    BIT1
 #define BIT_TELEINFO_DATA      BIT2
-static EventGroupHandle_t s_status_bits;
+static EventGroupHandle_t s_status_bits = NULL;
 
 
 void update_status_tic()
 {
+    // ignore l'update si l'event n'a pas été initialisé
+    if( s_status_bits==NULL )
+        return;
+
     const char *msg = NULL;    
     EventBits_t status = xEventGroupGetBits( s_status_bits );
     switch( status & (BIT_SIGNAL_HISTORIQUE | BIT_SIGNAL_STANDARD) )
@@ -61,21 +65,30 @@ void update_status_tic()
 
 static void tic_timeout()
 {
-    xEventGroupClearBits( s_status_bits, BIT_TELEINFO_DATA );
-    update_status_tic();
+    if( s_status_bits!=NULL )
+    {
+        xEventGroupClearBits( s_status_bits, BIT_TELEINFO_DATA );
+        update_status_tic();
+    }
 }
 
 
 static void uart_timeout()
 {
-    xEventGroupClearBits( s_status_bits, (BIT_SIGNAL_HISTORIQUE|BIT_SIGNAL_STANDARD) );
-    tic_timeout();
+    if( s_status_bits!=NULL )
+    {
+        xEventGroupClearBits( s_status_bits, (BIT_SIGNAL_HISTORIQUE|BIT_SIGNAL_STANDARD) );
+        tic_timeout();
+    }
     //update_status_tic();     called in tic_timeout()
 }
 
 
 void status_rcv_uart( tic_mode_t mode, TickType_t next_before )
 {
+    if( s_wdt_uart == NULL || s_status_bits == NULL )
+        return;
+
     // reset uart watchdog
     if( next_before > 0 )
     {
@@ -102,6 +115,9 @@ void status_rcv_uart( tic_mode_t mode, TickType_t next_before )
 
 void status_rcv_tic_frame( TickType_t next_before)
 {
+    if(  s_wdt_ticframe==NULL || s_status_bits==NULL )
+        return;
+
     // reset tic watchdog
     if( next_before > 0 )
     {

@@ -38,7 +38,7 @@ static const uart_config_t uart_config_mode_standard = {
     .source_clk = UART_SCLK_APB,
 };
 
-static QueueHandle_t uart1_queue;
+static QueueHandle_t s_uart1_queue = NULL;
 
 /*
 typedef struct uart_task_params_s {
@@ -50,14 +50,14 @@ typedef struct uart_task_params_s {
 static void uart_task(void *pvParameters)
 {
     uart_event_t event;
-    uint8_t* dtmp = (uint8_t*) malloc(RD_BUF_SIZE);
+    uint8_t* dtmp = calloc(1, RD_BUF_SIZE);
 
     //uart_task_params_t *task_params = (uart_task_params_t *)pvParameters;
     int length_read, length_sent;
 
     for(;;) {
         //Waiting for UART event.
-        if(xQueueReceive(uart1_queue, (void * )&event, portMAX_DELAY)) {
+        if(xQueueReceive(s_uart1_queue, (void * )&event, portMAX_DELAY)) {
             memset(dtmp, 0, RD_BUF_SIZE);
 
             switch(event.type) {
@@ -81,7 +81,7 @@ static void uart_task(void *pvParameters)
                     // The ISR has already reset the rx FIFO,
                     // As an example, we directly flush the rx buffer here in order to read more data.
                     uart_flush_input(UART_TELEINFO_NUM);
-                    xQueueReset(uart1_queue);
+                    xQueueReset(s_uart1_queue);
                     break;
                 //Event of UART ring buffer full
                 case UART_BUFFER_FULL:
@@ -89,7 +89,7 @@ static void uart_task(void *pvParameters)
                     // If buffer full happened, you should consider encreasing your buffer size
                     // As an example, we directly flush the rx buffer here in order to read more data.
                     uart_flush_input(UART_TELEINFO_NUM);
-                    xQueueReset(uart1_queue);
+                    xQueueReset(s_uart1_queue);
                     break;
                 //Event of UART RX break detected
                 case UART_BREAK:
@@ -128,15 +128,35 @@ void uart_task_start( )
     //Set UART log level
     esp_log_level_set(TAG, ESP_LOG_INFO);
 
+    esp_err_t err;
+    s_uart1_queue = NULL;
+
     //Install UART driver, and get the queue.
     ESP_LOGD( TAG, "uart_driver_install()" );
-    uart_driver_install(UART_TELEINFO_NUM, BUF_SIZE * 2, BUF_SIZE * 2, 20, &uart1_queue, 0);
-    uart_param_config(UART_TELEINFO_NUM, &uart_config_mode_standard);
-    uart_set_pin(UART_TELEINFO_NUM, UART_PIN_NO_CHANGE, UART_TELEINFO_SIGNAL_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-    uart_set_rx_full_threshold( UART_TELEINFO_NUM, TIC_UART_THRESOLD);
 
-    //Create a task to handler UART event from ISR
-    //uart_task_params.to_decoder = streambuf_to_decoder;
+    err = uart_driver_install(UART_TELEINFO_NUM, BUF_SIZE * 2, BUF_SIZE * 2, 20, &s_uart1_queue, 0);
+    if( err != ESP_OK || s_uart1_queue == NULL )
+    {
+        ESP_LOGE( TAG, "erreur dans uart_driver_install() ou s_uart_queue non initialisée" );
+    }
+
+    err = uart_param_config(UART_TELEINFO_NUM, &uart_config_mode_standard);
+    if( err != ESP_OK  )
+    {
+        ESP_LOGE( TAG, "erreur dans uart_param_config()" );
+    }
+
+    err = uart_set_pin(UART_TELEINFO_NUM, UART_PIN_NO_CHANGE, UART_TELEINFO_SIGNAL_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    if( err != ESP_OK  )
+    {
+        ESP_LOGE( TAG, "erreur dans uart_set_pin()" );
+    }
+
+    err = uart_set_rx_full_threshold( UART_TELEINFO_NUM, TIC_UART_THRESOLD);
+    if( err != ESP_OK  )
+    {
+        ESP_LOGE( TAG, "erreur dans uart_set_rx_full_threshold()" );
+    }
 
     //ESP_LOGD( TAG, "uart_xTaskCreate()" );
     xTaskCreate(uart_task, "uart_task", 8192, NULL, 12, NULL);

@@ -13,7 +13,7 @@
 
 #include "errors.h"
 #include "decode.h"
-#include "flags.h"
+#include "dataset.h"
 #include "status.h"
 #include "mqtt.h"
 #include "process.h"
@@ -29,7 +29,7 @@ static const char *LABEL_DEVICE_ID = "ADSC";
 static QueueHandle_t s_to_process = NULL;
 
 
-static tic_error_t datasets_to_topic (char *buf, size_t size, const tic_dataset_t *ds )
+static tic_error_t datasets_to_topic (char *buf, size_t size, const dataset_t *ds )
 {
     while( ds != NULL )
     {
@@ -48,7 +48,7 @@ static tic_error_t datasets_to_topic (char *buf, size_t size, const tic_dataset_
 
 // envoie, ou non, des donnes pour mettre à jour l'afficheur
 //static tic_error_t affiche_dataset( tic_decoder_t *td, const tic_dataset_t *ds )
-static tic_error_t affiche_dataset( const tic_dataset_t *ds )
+static tic_error_t affiche_dataset( const dataset_t *ds )
 {
     
     //if( strcmp( ds->etiquette, "PAPP" ) == 0 )
@@ -73,7 +73,7 @@ static const char *FORMAT_STRING_SANS_HORODATE = "  \"%s\" : { \"val\":\"%s\" }"
 static const char *FORMAT_NUMERIC_SANS_HORODATE = "  \"%s\" : { \"val\":%d }";
 
 
-static size_t printf_ds( char *buf, size_t size, const tic_dataset_t *ds )
+static size_t printf_ds( char *buf, size_t size, const dataset_t *ds )
 {
     if( ds->flags & TIC_DS_NUMERIQUE )
     {
@@ -87,6 +87,7 @@ static size_t printf_ds( char *buf, size_t size, const tic_dataset_t *ds )
     }
 }
 
+
 static size_t get_time_iso8601( char *buf, size_t size )
 {
     time_t now = time(NULL);
@@ -96,13 +97,14 @@ static size_t get_time_iso8601( char *buf, size_t size )
 }
 
 
-static tic_dataset_t *filtre_datasets( tic_dataset_t *ds )
+static dataset_t *filtre_datasets( dataset_t *ds )
 {
-    tic_dataset_t *head = NULL; 
-    tic_dataset_t *tail = NULL;   // pointeur sur la queue pour conserver l'ordre
+    ESP_LOGD( TAG, "filtre_datasets()" );
+    dataset_t *head = NULL; 
+    dataset_t *tail = NULL;   // pointeur sur la queue pour conserver l'ordre
     while( ds != NULL )
     {
-        tic_dataset_t *tmp_next = ds->next;
+        dataset_t *tmp_next = ds->next;
         ds->next = NULL;
 
         if( ds->flags & TIC_DS_PUBLISHED )
@@ -118,7 +120,7 @@ static tic_dataset_t *filtre_datasets( tic_dataset_t *ds )
         }
         else
         {
-            free(ds);
+            dataset_free(ds);
         }
         ds = tmp_next;
     }
@@ -126,7 +128,7 @@ static tic_dataset_t *filtre_datasets( tic_dataset_t *ds )
 }
 
 // compare deux trames - les datasets doivent être triés !
-int compare_datasets( const tic_dataset_t *ds1, const tic_dataset_t *ds2 )
+int compare_datasets( const dataset_t *ds1, const dataset_t *ds2 )
 {
     while( (ds1!=NULL) && (ds2!= NULL) )
     {
@@ -149,7 +151,7 @@ int compare_datasets( const tic_dataset_t *ds1, const tic_dataset_t *ds2 )
 }
 
 
-static tic_error_t datasets_to_json( char *buf, size_t size, const tic_dataset_t *ds )
+static tic_error_t datasets_to_json( char *buf, size_t size, const dataset_t *ds )
 {
     size_t pos = 0;
 
@@ -196,13 +198,16 @@ static tic_error_t datasets_to_json( char *buf, size_t size, const tic_dataset_t
     return TIC_OK;
 }
 
-static tic_error_t build_mqtt_msg( mqtt_msg_t *msg, const tic_dataset_t *ds  )
+static tic_error_t build_mqtt_msg( mqtt_msg_t *msg, const dataset_t *ds  )
 {
 
+    ESP_LOGD( TAG, "build_mqtt_msg() msg=%p ds=%p", msg, ds);
+if(0) {
     affiche_dataset( ds );
     datasets_to_topic( NULL, 0, ds );
     filtre_datasets( NULL );
     datasets_to_json( NULL, 0, ds );
+}
     /*
     char *json_buffer = malloc(TIC_PROCESS_JSON_BUFFER_SIZE);
     char *topic_buffer = malloc(TIC_PROCESS_TOPIC_BUFFER_SIZE);
@@ -233,7 +238,7 @@ static tic_error_t build_mqtt_msg( mqtt_msg_t *msg, const tic_dataset_t *ds  )
     }
 
 */
-    return TIC_ERR;
+    return TIC_OK;
 }
 
 
@@ -244,14 +249,15 @@ static void process_task( void *pvParams )
     //process_task_param_t *params = (process_task_param_t *)pvParams;
 
     TickType_t max_ticks = TIC_PROCESS_TIMEOUT * 1000 / portTICK_PERIOD_MS; 
-//    tic_dataset_t *ds_last = NULL; 
-    tic_dataset_t *ds = NULL;
 
     mqtt_msg_t *msg = NULL;
+    dataset_t *ds = NULL;
 
     for(;;)
     {
-        tic_dataset_free( ds );    //libère les datasets reçus de decode_task
+        //ESP_LOGD( TAG, "START process_task loop ds=%p msg=%p ...", ds, msg );
+
+        dataset_free( ds );    //libère les datasets reçus de decode_task
         ds = NULL;
 
         mqtt_msg_free( msg );        // libere les msg non-envoyés à mqtt_task
@@ -265,38 +271,55 @@ static void process_task( void *pvParams )
             continue;
         }
 
+        //uint32_t nb=dataset_count(ds);
+        //ESP_LOGD( TAG, "%"PRIu32" datasets reçus ds=%p &ds=%p", nb, ds, &ds);
+        
         // envoie la trame au module de calcul de puissance active
         puissance_new_trame( ds );
 
-        mqtt_msg_t *msg = mqtt_msg_alloc();
+        msg = mqtt_msg_alloc();
         if( msg == NULL)
         {
             continue;   // erreur logguee dans mqtt_alloc_msg()
         }
-
+        continue;
+        
         if( build_mqtt_msg( msg, ds ) != TIC_OK)
         {
+            ESP_LOGD( TAG, "... build_mqtt_msg() renvoie != TIC_OK" );
             continue;    // erreur logguee dans build_mqtt_msg()
         }
 
+        //ESP_LOGD( TAG, "END process_task loop ds=%p msg=%p ...", ds, msg );
+
+/*
         if( mqtt_receive_msg(msg) == TIC_OK )
         {
             msg = NULL;   // sera liberé par mqtt_task;
         }
+    */
     }
     ESP_LOGE( TAG, "fatal: process_task exited" );
     vTaskDelete(NULL);
 }
 
 
-tic_error_t process_receive_datasets( tic_dataset_t *ds )
+tic_error_t process_receive_datasets( dataset_t *ds )
 {
-    BaseType_t send_ok = xQueueSend( s_to_process, ds, 10 );
+    if( s_to_process == NULL )
+    {
+        ESP_LOGD( TAG, "queue s_to_process pas initialisée" );
+        return TIC_ERR;
+    }
+
+    BaseType_t send_ok = xQueueSend( s_to_process, &ds, 10 );
     if( send_ok != pdTRUE )
     {
         ESP_LOGE( TAG, "Queue pleine : impossible de recevoir la trame TIC decodee" );
         return TIC_ERR_QUEUEFULL;
     }
+    //uint32_t nb = dataset_count(ds);
+    //ESP_LOGD( TAG, "%"PRIu32" datasets mis dans la queue %p", nb, ds);
     return TIC_OK;
 }
 
@@ -304,6 +327,7 @@ tic_error_t process_receive_datasets( tic_dataset_t *ds )
 BaseType_t process_task_start( QueueHandle_t to_decoder, QueueHandle_t to_mqtt )
 {
     esp_log_level_set( TAG, ESP_LOG_DEBUG );
+    esp_log_level_set( "puissance.c", ESP_LOG_DEBUG );
 
     puissance_init();
 /*
@@ -325,7 +349,7 @@ BaseType_t process_task_start( QueueHandle_t to_decoder, QueueHandle_t to_mqtt )
 */
 
     // reçoit les trames décodées par decode_task
-    s_to_process = xQueueCreate( 5, sizeof( tic_dataset_t * ) );
+    s_to_process = xQueueCreate( 5, sizeof( dataset_t * ) );
     if( s_to_process==NULL )
     {
         ESP_LOGE( TAG, "xCreateQueue() failed" );

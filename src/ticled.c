@@ -11,10 +11,10 @@
 #include "pinout.h"
 #include "ticled.h"
 
-static const char *TAG = "led_blink";
+static const char *TAG = "ticled.c";
 
 // Contrôle de la led du PtiInfo avec un EventGroup
-EventGroupHandle_t s_to_ticled;
+EventGroupHandle_t s_to_ticled = NULL;
 #define TIC_BIT_COURT    ( 1 << 0 )
 #define TIC_BIT_LONG     ( 1 << 1 )
 
@@ -24,15 +24,25 @@ typedef struct led_task_params_s {
 } led_task_params_t;
 */
 
+
+static void ticled_blink( const EventBits_t bits ) 
+{
+    if( s_to_ticled == NULL )
+    {
+        ESP_LOGD( TAG, "s_to_ticled pas initialisé" );
+        return;
+    }
+    xEventGroupSetBits( s_to_ticled, bits );
+}
+
 void ticled_blink_short( ) 
 {
-     xEventGroupSetBits( s_to_ticled, TIC_BIT_COURT );
+    ticled_blink( TIC_BIT_COURT );
 }
 
 void ticled_blink_long( ) 
 {
-    // blink led at each UART receive event
-    xEventGroupSetBits( s_to_ticled, TIC_BIT_LONG );
+    ticled_blink( TIC_BIT_LONG );
 }
 
 

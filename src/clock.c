@@ -22,7 +22,7 @@
 
 static const char *TAG = "timesync";
 
-EventGroupHandle_t s_clock_evt;
+EventGroupHandle_t s_clock_evt = NULL;
 
 #define SYNC_CLOCK_BIT       BIT0
 #define MAX_RESYNC_INTERVAL  5
@@ -31,16 +31,20 @@ EventGroupHandle_t s_clock_evt;
 
 void clock_lost()
 {
+    if( s_clock_evt == NULL )
+        return;
     xEventGroupClearBits( s_clock_evt, SYNC_CLOCK_BIT );
 }
 
 
 void sntp_callback( struct timeval *tv )
 {
+
     // clock will be marked lost if not resynced periodically
     uint32_t clock_lost_delay = sntp_get_sync_interval() * MAX_RESYNC_INTERVAL ;
     xTimerCreate( "clock_watchdog", clock_lost_delay / portTICK_PERIOD_MS, pdFALSE, NULL, clock_lost );
     ESP_LOGI( TAG, "Got NTP time from %s. Sync will be lost in %lu seconds", CLOCK_SERVER_NAME, clock_lost_delay / 1000 );
+    ESP_LOGW( TAG, "Attention au memory leak avec ce timer ?");
 
     // log full time+date
     time_t now = tv->tv_sec;
@@ -51,13 +55,16 @@ void sntp_callback( struct timeval *tv )
     ESP_LOGI( TAG, "local time %s", buf );
 
     // notify clock loop
+    if( s_clock_evt == NULL )
+        return;
     xEventGroupSetBits( s_clock_evt, SYNC_CLOCK_BIT );
 }
 
 void clock_task( void *pvParams )
 {
+    assert( s_clock_evt != NULL );
     ESP_LOGI( TAG, "clock_task()" );
-
+    
     time_t now;
     struct tm timeinfo;
     char buf[20];

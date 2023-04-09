@@ -27,7 +27,7 @@
 static const char *TAG = "oled_task";
 
 
-static QueueHandle_t s_to_oled;
+static QueueHandle_t s_to_oled = NULL;
 
 /*** 
  * oled_update est appelé depuis les autres tâches pour envoyer des infos à l'afficheur
@@ -35,6 +35,12 @@ static QueueHandle_t s_to_oled;
 extern "C"
 BaseType_t oled_update( display_event_type_t type, const char* txt )
 {
+    if( s_to_oled == NULL )
+    {
+        ESP_LOGD( TAG, "oled pas encore initialisé" );
+        return TIC_ERR;
+    }
+
     display_event_t evt;
     evt.info = type;
 
