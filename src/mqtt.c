@@ -18,7 +18,7 @@
 #include "status.h"
 #include "mqtt.h"
 
-static const char *TAG = "mqtt_task";
+static const char *TAG = "mqtt.c";
 
 typedef struct mqtt_task_param_s {
     //QueueHandle_t from_decoder;
@@ -36,25 +36,30 @@ static void log_error_if_nonzero(const char *message, int error_code)
     }
 }
 
+// pour le debug
+//static int32_t s_allocated_msg = 0;
+
 // Alloue/libere un mqtt_msg_t  
 // pour la communication entre tâches process.c et mqtt.c
 mqtt_msg_t * mqtt_msg_alloc()
 {
-    mqtt_msg_t *msg = malloc( sizeof(mqtt_msg_t) );
-    char *topic_ptr = malloc( MQTT_TOPIC_BUFFER_SIZE );
-    char *payload_ptr = malloc( MQTT_PAYLOAD_BUFFER_SIZE );
+    mqtt_msg_t *msg = calloc( 1, sizeof(mqtt_msg_t) );
+    char *topic = calloc( 1, MQTT_TOPIC_BUFFER_SIZE );
+    char *payload = calloc( 1, MQTT_PAYLOAD_BUFFER_SIZE );
 
-    if ( msg!=NULL && topic_ptr!=NULL && payload_ptr!=NULL )
+    if ( msg==NULL ||topic==NULL || payload==NULL )
     {
-        msg->topic = topic_ptr;
-        msg->payload = payload_ptr;
-        return msg;
-    }
-    else
-    {
-        ESP_LOGE( TAG, "malloc() failed");
+        ESP_LOGE( TAG, "mqtt_msg_alloc() failed (out of memory ?)");
+        free(topic);
+        free(payload);
+        free(msg);
         return NULL;
     }
+    msg->topic = topic;
+    msg->payload = payload;
+    //s_allocated_msg += 1;
+    // ESP_LOGD( TAG, "mqtt_msg_alloc()=%p   nb_msg_alloues=%"PRIi32, msg, s_allocated_msg );
+    return msg;
 }
 
 void mqtt_msg_free(mqtt_msg_t *msg)
@@ -72,15 +77,25 @@ void mqtt_msg_free(mqtt_msg_t *msg)
         free( msg->payload);
         msg->payload = NULL;
     }
+    free( msg );
+    
+    //s_allocated_msg -= 1;
 }
 
 
 tic_error_t mqtt_receive_msg( mqtt_msg_t *msg )
 {
-    BaseType_t send_ok = xQueueSend( s_to_mqtt, msg, 10 );
+    //ESP_LOGD( TAG, " mqtt_receive_msg()");
+    if( s_to_mqtt == NULL )
+    {
+        ESP_LOGD( TAG, "queue mqtt pas initialisée" );
+        return TIC_ERR;
+    }
+
+    BaseType_t send_ok = xQueueSend( s_to_mqtt, &msg, 10 );
     if( send_ok != pdTRUE )
     {
-        ESP_LOGE( TAG, "Queue pleine : impossible de recevoir le message mqtt" );
+        ESP_LOGE( TAG, "message refusé par mqtt_task (queue pleine)" );
         return TIC_ERR_QUEUEFULL;
     }
     return TIC_OK;
@@ -168,7 +183,7 @@ void mqtt_task( void *pvParams )
         BaseType_t msg_received = xQueueReceive( s_to_mqtt, &msg, max_ticks );
         if( msg_received != pdTRUE )
         {
-            ESP_LOGI( TAG, "Aucune trame téléinfo reçue depuis %d secondes (%p)", TIC_PROCESS_TIMEOUT, msg );
+            ESP_LOGI( TAG, "Aucun message MQTT à envoyer depuis %d secondes", TIC_PROCESS_TIMEOUT );
             continue;
         }
         if( msg==NULL )
@@ -187,7 +202,7 @@ void mqtt_task( void *pvParams )
             continue;
         }
 
-        esp_mqtt_client_publish( params->esp_client, msg->topic, msg->payload, 0, 0, 0);
+        //esp_mqtt_client_publish( params->esp_client, msg->topic, msg->payload, 0, 0, 0);
         /* ingore les erreurs*/
     }
 
@@ -252,10 +267,10 @@ BaseType_t mqtt_task_start( )
     }
 
     // passe des pointeurs à la tâche
-    mqtt_task_param_t *task_params = malloc( sizeof( mqtt_task_param_t ) );
+    mqtt_task_param_t *task_params = calloc( 1, sizeof( mqtt_task_param_t ) );
     if( task_params==NULL )
     {
-        ESP_LOGE( TAG, "malloc() failed" );
+        ESP_LOGE( TAG, "calloc() failed" );
         return pdFALSE;
     }
 
@@ -271,6 +286,70 @@ BaseType_t mqtt_task_start( )
 
     // create mqtt client task
     BaseType_t task_created = xTaskCreate( mqtt_task, "mqtt_task", 4096, task_params, 12, NULL);
+    if( task_created != pdPASS )
+    {
+        ESP_LOGE( TAG, "xTaskCreate() failed");
+    }
+    return task_created;
+}
+
+void mqtt_task_dummy( void *pvParams )
+{
+    ESP_LOGI( TAG, "mqtt_task_dummy()");
+
+    TickType_t max_ticks = MQTT_TIC_TIMEOUT_SEC * 1000 / portTICK_PERIOD_MS; 
+    mqtt_msg_t *msg = NULL;
+    for(;;)
+    {
+        mqtt_msg_free(msg);    // libère les buffers alloués par process_task
+        msg = NULL;
+
+        BaseType_t msg_received = xQueueReceive( s_to_mqtt, &msg, max_ticks );
+        if( msg_received != pdTRUE )
+        {
+            ESP_LOGI( TAG, "Aucun message MQTT à envoyer depuis %d secondes (%p)", TIC_PROCESS_TIMEOUT, msg );
+            continue;
+        }
+        if( msg==NULL )
+        {
+            ESP_LOGD( TAG, "Message MQTT null");
+            continue;
+        }
+        if( msg->topic==NULL || msg->topic[0]=='\0' )
+        {
+            ESP_LOGD( TAG, "Topic MQTT absent");
+            continue;
+        }
+        if( msg->payload==NULL || msg->payload[0]=='\0' )
+        {
+            ESP_LOGD( TAG, "Payload MQTT absent");
+            continue;
+        }
+
+        ESP_LOGD( TAG, "dummy_mqtt topic\n%s", msg->topic );
+        ESP_LOGD( TAG, "dummy_mqtt payload\n%s", msg->payload );
+
+    }
+    ESP_LOGE( TAG, "fatal: mqtt_task exited" );
+    vTaskDelete(NULL);
+}
+
+
+BaseType_t mqtt_dummy_task_start( )
+{
+    esp_log_level_set( TAG, ESP_LOG_DEBUG );
+
+
+    // Queue pour recevoir les messages formattés à publier
+    s_to_mqtt = xQueueCreate( 5, sizeof( mqtt_msg_t * ) );
+    if( s_to_mqtt==NULL )
+    {
+        ESP_LOGE( TAG, "xCreateQueue() failed" );
+        return pdFALSE;    // inutile de continuer....
+    }
+
+    // create mqtt client task
+    BaseType_t task_created = xTaskCreate( mqtt_task_dummy, "mqtt_task_dummy", 2048, NULL, 12, NULL);
     if( task_created != pdPASS )
     {
         ESP_LOGE( TAG, "xTaskCreate() failed");

@@ -70,7 +70,7 @@ void app_main(void)
     uart_task_start();
     tic_decode_task_start();
     process_task_start();
-//    mqtt_dummy_task_start();
+    mqtt_dummy_task_start();
 //    clock_task_start();
 }
 
