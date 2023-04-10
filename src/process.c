@@ -58,12 +58,14 @@ static tic_error_t set_topic (char *buf, size_t size, const dataset_t *ds )
 // envoie, ou non, des donnes pour mettre à jour l'afficheur
 static tic_error_t affiche_papp( const dataset_t *ds )
 {
-    if( strcmp( ds->etiquette, LABEL_PUISSANCE_APPARENTE ) == 0 )
+    ds = dataset_find( ds, LABEL_PUISSANCE_APPARENTE );
+    if( ds != NULL  )
     {
         uint32_t papp = strtol( ds->valeur, NULL, 10 );
         status_papp_update( papp );
     }
-    //ESP_LOGD ( TAG, "%s %s", ds->etiquette, ds->valeur);
+
+    ESP_LOGD ( TAG, "affiche_papp() %s %s", ds->etiquette, ds->valeur);
     return TIC_OK;
 }
 

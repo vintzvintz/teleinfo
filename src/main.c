@@ -45,11 +45,6 @@ void nvs_initialise(void)
 
 void app_main(void)
 {
-    esp_log_level_set("*", ESP_LOG_DEBUG);
-    esp_log_level_set(TAG, ESP_LOG_DEBUG);
-    esp_log_level_set("wifi", ESP_LOG_WARN);
-    esp_log_level_set("wifi_init", ESP_LOG_WARN);
-    esp_log_level_set("ticled.c", ESP_LOG_INFO);
 
 
     ESP_LOGI(TAG, "[APP] Startup..");
@@ -58,7 +53,7 @@ void app_main(void)
 
     status_init();
     nvs_initialise();    // required for wifi driver
-    //wifi_task_start();
+    wifi_task_start();
 
 
     setenv( "TZ", TZSTRING_CET, 1);
@@ -70,7 +65,16 @@ void app_main(void)
     uart_task_start();
     tic_decode_task_start();
     process_task_start();
-    mqtt_dummy_task_start();
-//    clock_task_start();
+    mqtt_task_start( 0 );   // 0=lance le client mqtt   1=dummy/debug
+    clock_task_start();
+
+    esp_log_level_set("*", ESP_LOG_INFO);
+    //esp_log_level_set(TAG, ESP_LOG_DEBUG);
+    esp_log_level_set( "process.c",ESP_LOG_INFO);
+    esp_log_level_set( "puissance.c",ESP_LOG_INFO);
+    esp_log_level_set( "mqtt.c",ESP_LOG_INFO);
+    esp_log_level_set("wifi", ESP_LOG_WARN);
+    esp_log_level_set("wifi_init", ESP_LOG_WARN);
+    esp_log_level_set("ticled.c", ESP_LOG_INFO);
 }
 
