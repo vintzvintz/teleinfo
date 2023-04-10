@@ -1,21 +1,12 @@
 
 #pragma once
 
-// buffer de reception - alimenté par la tâche uart
-#define DECODE_RCV_BUFFER_SIZE     512
-#define DECODE_RCV_BUFFER_TRIGGER   16
-
 
 // taille des buffers
 #define TIC_SIZE_ETIQUETTE    16     // etiquette
 #define TIC_SIZE_VALUE        128    // donnée ou horodate
 #define TIC_SIZE_CHECKSUM     4      // checksum
 
-
-// nb maxi de datasets dans une trame
-//#define TIC_MAX_DATASETS    99
-
-//#define RX_BUF_SIZE 128
 
 typedef char tic_char_t;
 typedef uint32_t tic_dataset_flags_t;
@@ -52,12 +43,16 @@ tic_error_t dataset_print( const dataset_t *dataset );
 
 uint32_t dataset_count( dataset_t *dataset );
 
-uint32_t dataset_size( dataset_t *dataset );
-
+// recherche un element selon son etiquette
 const dataset_t* dataset_find( const dataset_t *ds, const char *etiquette );
 
+// tri selon les étiquettes
 dataset_t * dataset_sort( dataset_t *ds);
 
+// insere ds dans sorted avec tri selon les etiquettes
 dataset_t * dataset_insert( dataset_t *sorted, dataset_t *ds);
 
-tic_error_t tic_get_flags( const tic_char_t *etiquette, tic_dataset_flags_t *flags );
+// ajoute ds après le dernier elements de append_to
+dataset_t * dataset_append( dataset_t *append_to, dataset_t*ds );
+
+tic_error_t dataset_flags_definition( const tic_char_t *etiquette, tic_dataset_flags_t *flags );

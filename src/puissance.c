@@ -6,7 +6,7 @@
 #include "esp_log.h"
 
 #include "errors.h"
-#include "decode.h"
+#include "dataset.h"
 #include "puissance.h"
 
 static const char *TAG = "puissance.c";
@@ -15,6 +15,8 @@ static const char *TAG = "puissance.c";
 
 static const char *LABEL_ENERGIE_ACTIVE_TOTALE = "EAST";
 static const char *LABEL_HORODATE = "DATE";
+
+static const char *LABEL_PACT_PREFIX = "PACT";
 
 
 typedef struct point_east_s {
@@ -69,7 +71,7 @@ int32_t puissance_get ( uint8_t n )
 
     if( pN->east==0 || pN->ts==0 || p0->east==0 || p0->ts==0 )
     {
-        ESP_LOGW( TAG, "p_active(%d) indisponible : pas assez de points", n);
+        ESP_LOGD( TAG, "p_active(%d) indisponible : pas assez de points", n);
         return -1;
     }
 
@@ -78,11 +80,44 @@ int32_t puissance_get ( uint8_t n )
 
     if( duree == 0 )
     {
-        ESP_LOGW( TAG, "p_active(%d) indisponible : deux index avec horodate identique", n);
+        ESP_LOGD( TAG, "p_active(%d) indisponible : deux index avec horodate identique", n);
         return -1;
     }
 
     return (3600*energie)/duree;    // energie est en Watt.heure, on veut des Watt.seconde
+}
+
+// calcule les puissances actives et revoie les resultats sous forme de datasets 
+dataset_t * puissance_get_all()
+{
+    dataset_t * ret = NULL;
+
+    // pour le debug
+    char etat[TIC_LAST_POINTS_CNT+2];
+    etat[0] = '[';
+    etat[TIC_LAST_POINTS_CNT] = ']';
+    etat[TIC_LAST_POINTS_CNT+1] = '\0';
+
+    for( uint8_t i=1; i<TIC_LAST_POINTS_CNT; i++ )
+    {
+        int32_t p = puissance_get( i );
+        
+        if( p<0 )
+        {
+            etat[i]='_';
+            continue;
+        }
+        etat[i] = 'x';
+        
+        dataset_t *ds = dataset_alloc();
+        snprintf( ds->etiquette, TIC_SIZE_ETIQUETTE, "%s%02"PRIi8, LABEL_PACT_PREFIX, i );
+        snprintf( ds->valeur, TIC_SIZE_VALUE, "%"PRIi32, p );
+        ds->flags = TIC_DS_NUMERIQUE | TIC_DS_PUBLISHED;
+
+        ret = dataset_append( ret, ds );
+    }
+    ESP_LOGD(TAG, "Puissances actives disponibles %s", etat);
+    return ret;
 }
 
 
@@ -265,7 +300,7 @@ tic_error_t puissance_new_trame( const dataset_t *ds )
 }
 
 
-
+/*
 void puissance_debug()
 {
     uint8_t i;
@@ -279,3 +314,4 @@ void puissance_debug()
         }
     }
 }
+*/

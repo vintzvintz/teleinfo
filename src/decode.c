@@ -190,7 +190,7 @@ static tic_error_t decode_dataset_end( tic_decoder_t *td ) {
     
     // ajoute les flags
     tic_dataset_flags_t flags;
-    if( tic_get_flags( ds->etiquette, &flags) == TIC_OK )
+    if( dataset_flags_definition( ds->etiquette, &flags) == TIC_OK )
     {
         ds->flags = flags;
     }

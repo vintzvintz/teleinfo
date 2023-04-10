@@ -23,9 +23,7 @@ static const char *TAG = "process.c";
 
 #define TIC_LAST_POINTS_CNT  10
 
-
 static QueueHandle_t s_to_process = NULL;
-
 
 //static const char *LABEL_ADCO = "ADCO";
 static const char *LABEL_DEVICE_ID = "ADSC";
@@ -183,25 +181,18 @@ static tic_error_t datasets_to_json( char *buf, size_t size, const dataset_t *ds
 }
 
 
-static tic_error_t set_payload( char *buf, size_t size, const dataset_t *ds )
+static tic_error_t set_payload( char *buf, size_t size, dataset_t *ds )
 {
+    dataset_t * p_actives = puissance_get_all();
+    ds = dataset_append( ds, p_actives );
     return datasets_to_json( buf, size, ds );
 }
 
-static tic_error_t build_mqtt_msg( mqtt_msg_t *msg, const dataset_t *ds  )
+static tic_error_t build_mqtt_msg( mqtt_msg_t *msg, dataset_t *ds  )
 {
-
     ESP_LOGD( TAG, "build_mqtt_msg() msg=%p ds=%p", msg, ds);
 
-//     Pour tester
-//    strncpy( msg->topic, "weshTopic", MQTT_TOPIC_BUFFER_SIZE );
-//    strncpy( msg->payload, "weshPayload", MQTT_PAYLOAD_BUFFER_SIZE );
-
     tic_error_t err;
-
-    err = affiche_papp( ds );
-    //ignore erreur
-
     err = set_topic( msg->topic, MQTT_TOPIC_BUFFER_SIZE, ds );
     if( err != TIC_OK )
     {
@@ -226,37 +217,34 @@ static void process_task( void *pvParams )
     ESP_LOGI( TAG, "process_task()");
 
     //process_task_param_t *params = (process_task_param_t *)pvParams;
-
-    TickType_t max_ticks = TIC_PROCESS_TIMEOUT * 1000 / portTICK_PERIOD_MS; 
-
+    // TickType_t max_ticks = TIC_PROCESS_TIMEOUT * 1000 / portTICK_PERIOD_MS; 
     mqtt_msg_t *msg = NULL;
     dataset_t *ds = NULL;
 
     for(;;)
     {
         //ESP_LOGD( TAG, "START process_task loop ds=%p msg=%p ...", ds, msg );
-
         dataset_free( ds );    //libère les datasets reçus de decode_task
         ds = NULL;
 
         mqtt_msg_free( msg );        // libere les msg non-envoyés à mqtt_task
         msg=NULL;
 
-
-        BaseType_t ds_received = xQueueReceive( s_to_process, &ds, max_ticks );
+        BaseType_t ds_received = xQueueReceive( s_to_process, &ds, portMAX_DELAY );
         if( ds_received != pdTRUE )
         {
-            ESP_LOGI( TAG, "Aucune trame téléinfo reçue depuis %d secondes", TIC_PROCESS_TIMEOUT );
+            //ESP_LOGD( TAG, "Aucune trame téléinfo reçue depuis %d secondes", TIC_PROCESS_TIMEOUT );
             continue;
         }
 
         //uint32_t nb=dataset_count(ds);
         //ESP_LOGD( TAG, "%"PRIu32" datasets reçus ds=%p &ds=%p", nb, ds, &ds);
+
+        // mise à jour afficheur oled
+        affiche_papp( ds );                //ignore erreurs
         
         // envoie la trame au module de calcul de puissance active
         puissance_new_trame( ds );
-
-        puissance_debug();
 
         msg = mqtt_msg_alloc();
         if( msg == NULL)
@@ -270,6 +258,7 @@ static void process_task( void *pvParams )
             continue;    // erreur logguee dans build_mqtt_msg()
         }
 
+        // envoie le message à mqtt_task
         if( mqtt_receive_msg(msg) == TIC_OK )
         {
             msg = NULL;   // sera liberé par mqtt_task;

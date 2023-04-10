@@ -1,21 +1,17 @@
 
-
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
 
-
 #include "errors.h"
 #include "dataset.h"
-//#include "decode.h"
-//#include "flags.h"
+
 
 static const char *TAG = "dataset.c";
 
-static int32_t s_allocated_datasets = 0;
-
+//static int32_t s_allocated_datasets = 0;
 
 #define TEXTE (TIC_DS_PUBLISHED)
 #define NUMERIQUE (TIC_DS_PUBLISHED|TIC_DS_NUMERIQUE)
@@ -69,7 +65,7 @@ static const flags_definition_t TIC_DATA_DEFINITION[] = {
 
 #define DEF_CNT (sizeof(TIC_DATA_DEFINITION) / sizeof(TIC_DATA_DEFINITION[0]))
 
-tic_error_t tic_get_flags( const tic_char_t *etiquette, tic_dataset_flags_t *flags )
+tic_error_t dataset_flags_definition( const tic_char_t *etiquette, tic_dataset_flags_t *flags )
 {
     for( size_t i=0; i< DEF_CNT; i++ )
     {
@@ -93,18 +89,6 @@ uint32_t dataset_count( dataset_t *dataset )
     return nb;
 }
 
-uint32_t dataset_size( dataset_t *dataset )
-{
-    uint32_t size = 0;
-    while ( dataset != NULL )
-    {
-        size += strlen( dataset->etiquette) + 1;    // 1 separator
-        size += strlen( dataset->horodate) + 1;     // 1 separator
-        size += strlen( dataset->valeur) + 1;       // '\n' ou '\0'
-        dataset = dataset->next;
-    }
-    return size;
-}
 
 tic_error_t dataset_print( const dataset_t *ds )
 {
@@ -157,10 +141,10 @@ void dataset_free( dataset_t *ds )
     //int32_t nb_init = dataset_count(ds);
     //int32_t nb_alloc_before = 0;
     //nb_alloc_before = s_allocated_datasets;
-    */
     dataset_t *ds_init = ds;   // juste pour le log_debug
-    int32_t nb_free = 0;
+    */
 
+    int32_t nb_free = 0;
     while ( ds != NULL )
     {
         dataset_t *tmp = ds;
@@ -213,6 +197,24 @@ dataset_t* dataset_insert( dataset_t *sorted, dataset_t *ds)
         sorted = ds;
     }
     return sorted;
+}
+
+// ajoute ds après le dernier elements de append_to
+dataset_t * dataset_append( dataset_t *append_to, dataset_t*ds )
+{
+    // impossible d'ajouter au pointeur null alors on renvoie juste ds
+    if( append_to == NULL )
+    {
+        return ds;
+    }
+    // cherche le dernier element de append_to
+    dataset_t *tail = append_to;
+    while ( tail->next != NULL )
+    {
+        tail=tail->next;
+    }
+    tail->next = ds;     // ajoute ds
+    return append_to;
 }
 
 
