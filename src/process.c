@@ -27,9 +27,10 @@ static QueueHandle_t s_to_process = NULL;
 
 //static const char *LABEL_ADCO = "ADCO";
 static const char *LABEL_DEVICE_ID = "ADSC";
-
 //static const char *LABEL_PUISSANCE_APPARENTE = "PAPP";
 static const char *LABEL_PUISSANCE_APPARENTE = "SINSTS";
+static const char *LABEL_HORODATE="DATE";
+
 
 static const char *FORMAT_ISO8601 = "%Y-%m-%dT%H:%M:%S%z";
 static const char *FORMAT_NUMERIC_SANS_HORODATE = "  \"%s\":{\"val\":%"PRIi32"}";
@@ -45,7 +46,7 @@ static tic_error_t set_topic (char *buf, size_t size, const dataset_t *ds )
         if( strcmp( ds->etiquette, LABEL_DEVICE_ID ) == 0 )
         {
             snprintf( buf, size, MQTT_TOPIC_FORMAT, ds->valeur );
-            ESP_LOGI( TAG , "Topic=%s", buf );
+            ESP_LOGD( TAG , "Topic=%s", buf );
             return TIC_OK;
         }
         ds = ds->next;
@@ -58,14 +59,24 @@ static tic_error_t set_topic (char *buf, size_t size, const dataset_t *ds )
 // envoie, ou non, des donnes pour mettre à jour l'afficheur
 static tic_error_t affiche_papp( const dataset_t *ds )
 {
-    ds = dataset_find( ds, LABEL_PUISSANCE_APPARENTE );
-    if( ds != NULL  )
+    const dataset_t *ds_papp = dataset_find( ds, LABEL_PUISSANCE_APPARENTE );
+    if( ds_papp == NULL  )
     {
-        uint32_t papp = strtol( ds->valeur, NULL, 10 );
-        status_papp_update( papp );
+        ESP_LOGD( TAG, "puissance apparente %s non disponible", LABEL_PUISSANCE_APPARENTE );
+        return TIC_ERR_MISSING_DATA;
     }
 
-    ESP_LOGD ( TAG, "affiche_papp() %s %s", ds->etiquette, ds->valeur);
+    uint32_t papp = strtol( ds_papp->valeur, NULL, 10 );
+    status_papp_update( papp );
+
+    const dataset_t *ds_horodate = dataset_find( ds, LABEL_HORODATE );
+    if( ds_horodate == NULL )
+    {
+        ESP_LOGD( TAG, "horodate %s non disponible", LABEL_HORODATE );
+        return TIC_ERR_MISSING_DATA;
+    }
+
+    ESP_LOGI ( TAG, "%s=%s %s=%s", ds_horodate->etiquette, ds_horodate->horodate, ds_papp->etiquette, ds_papp->valeur);
     return TIC_OK;
 }
 
@@ -242,7 +253,7 @@ static void process_task( void *pvParams )
         //uint32_t nb=dataset_count(ds);
         //ESP_LOGD( TAG, "%"PRIu32" datasets reçus ds=%p &ds=%p", nb, ds, &ds);
 
-        // mise à jour afficheur oled
+        // mise à jour afficheur oled et logs port serie
         affiche_papp( ds );                //ignore erreurs
         
         // envoie la trame au module de calcul de puissance active
