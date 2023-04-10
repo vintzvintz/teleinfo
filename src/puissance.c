@@ -59,7 +59,6 @@ static void add_east_point( const east_point_t * pt )
 
 int32_t puissance_get ( uint8_t n )
 {
-
     if( n<1 || n>TIC_LAST_POINTS_CNT)
     {
         ESP_LOGW( TAG, "calcule_p_active(%d) avec n invalide", n);
@@ -71,7 +70,7 @@ int32_t puissance_get ( uint8_t n )
 
     if( pN->east==0 || pN->ts==0 || p0->east==0 || p0->ts==0 )
     {
-        ESP_LOGD( TAG, "p_active(%d) indisponible : pas assez de points", n);
+        //ESP_LOGD( TAG, "p_active(%d) indisponible", n);
         return -1;
     }
 
@@ -134,7 +133,6 @@ static tic_error_t tsfragment_to_int( const char *start, int read_len, int *val,
     strncpy( buf, start, read_len );
     buf[read_len]= '\0';
 
-    //ESP_LOGD( TAG, "strtol(%s)", buf );
     char *end;
     *val = strtol( buf, &end, 10);
     if( end-buf != read_len)
@@ -143,7 +141,6 @@ static tic_error_t tsfragment_to_int( const char *start, int read_len, int *val,
         return TIC_ERR_BAD_DATA;
     }
     *val += offset;
-//    ESP_LOGD( TAG, "val=%d", *val );
     return TIC_OK;
 }
 
@@ -151,8 +148,6 @@ static tic_error_t tsfragment_to_int( const char *start, int read_len, int *val,
 static tic_error_t horodate_to_time_t( const char *horodate, time_t *unix_time)
 {
     //ESP_LOGD( TAG, "horodate_to_time_t(%s)", horodate  );
-
-
 /*
     struct tm tm1 = { .tm_year=123, 
                      .tm_mon=4,
@@ -162,15 +157,12 @@ static tic_error_t horodate_to_time_t( const char *horodate, time_t *unix_time)
                      .tm_sec=8, 
                      .tm_isdst=-1 };
     time_t t = mktime( &tm1 );
-
     ESP_LOGD( TAG, "time_t t = %"PRIi64, t);
-
     struct tm timeinfo;
     localtime_r( &t, &timeinfo );
     strftime( timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S", &timeinfo );
     ESP_LOGI( TAG, "local time %s", timebuf );
 */
-
     struct tm tm;
 
     // utilise l'indication d'heure d'été reçue

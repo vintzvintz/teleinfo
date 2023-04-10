@@ -141,7 +141,7 @@ static tic_error_t datasets_to_json( char *buf, size_t size, const dataset_t *ds
     char time_buf[30];
     get_time_iso8601( time_buf, sizeof(time_buf) );
 
-    pos += snprintf( &(buf[pos]), size-pos, "{  \"horodate\" : \"%s\",\n  \"tic\" : {\n", time_buf );
+    pos += snprintf( &(buf[pos]), size-pos, "{\n\"esp_time\":\"%s\",\n\"esp_free_mem\":\"%"PRIu32"\",\n\"tic\" : {\n", time_buf, esp_get_free_heap_size() );
 
     while( ds!=NULL && (size-pos) > 0 )
     {
