@@ -34,9 +34,9 @@ static const char *LABEL_HORODATE="DATE";
 
 static const char *FORMAT_ISO8601 = "%Y-%m-%dT%H:%M:%S%z";
 static const char *FORMAT_NUMERIC_SANS_HORODATE = "  \"%s\":{\"val\":%"PRIi32"}";
-static const char *FORMAT_NUMERIC_AVEC_HORODATE = "  \"%s\":{\"horodate\":%s \"val\":%"PRIi32"}";
+static const char *FORMAT_NUMERIC_AVEC_HORODATE = "  \"%s\":{\"horodate\":\"%s\", \"val\":%"PRIi32"}";
 static const char *FORMAT_STRING_SANS_HORODATE = "  \"%s\":{\"val\":\"%s\"}";
-static const char *FORMAT_STRING_AVEC_HORODATE = "  \"%s\":{\"horodate\":%s \"val\":\"%s\"}";
+static const char *FORMAT_STRING_AVEC_HORODATE = "  \"%s\":{\"horodate\":\"%s\", \"val\":\"%s\"}";
 
 
 static tic_error_t set_topic (char *buf, size_t size, const dataset_t *ds )
@@ -154,7 +154,7 @@ static tic_error_t datasets_to_json( char *buf, size_t size, const dataset_t *ds
     char time_buf[30];
     get_time_iso8601( time_buf, sizeof(time_buf) );
 
-    pos += snprintf( &(buf[pos]), size-pos, "{\n\"esp_time\":\"%s\",\n\"esp_free_mem\":\"%"PRIu32"\",\n\"tic\" : {\n", time_buf, esp_get_free_heap_size() );
+    pos += snprintf( &(buf[pos]), size-pos, "{\n\"esp_time\":\"%s\",\n\"esp_free_mem\":%"PRIu32",\n\"tic\" : {\n", time_buf, esp_get_free_heap_size() );
 
     while( ds!=NULL && (size-pos) > 0 )
     {
