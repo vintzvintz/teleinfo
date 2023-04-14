@@ -18,10 +18,17 @@ set(srcs
     "wifi.c"
     "bouton.c"     )
 
+
+
 idf_component_register( SRCS ${srcs} 
+                        INCLUDE_DIRS "include"
                         REQUIRES
                             lwip
                             driver
                             esp_wifi
                             esp_event
-                            esp_netif  )
+                            esp_netif
+                            esp-tls
+                            nvs_flash
+                            mqtt
+                         )

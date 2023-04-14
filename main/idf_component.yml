@@ -1,0 +1,9 @@
+dependencies:
+  qrcode: "^0.1.0"
+
+
+  lcdgfx:
+#    version: feature/test
+ #   path: test_component
+    git: git@github.com:vintzvintz/lcdgfx.git
+    

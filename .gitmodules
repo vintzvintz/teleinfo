@@ -1,3 +1,0 @@
-[submodule "components/lcdgfx"]
-	path = components/lcdgfx
-	url = git@github.com:vintzvintz/lcdgfx.git

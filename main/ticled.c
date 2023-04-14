@@ -3,9 +3,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
-#include "freertos/stream_buffer.h"
+//#include "freertos/stream_buffer.h"
 #include "driver/gpio.h"
-#include "mqtt_client.h"
+//#include "mqtt_client.h"
 
 #include "esp_log.h"
 #include "pinout.h"

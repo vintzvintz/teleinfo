@@ -1,6 +1,6 @@
-.pio
+/build
 /.vscode
-sdkconfig.*.old
+sdkconfig*.old
 teleinfo.code-workspace
 compile_commands.json
 /managed_components
