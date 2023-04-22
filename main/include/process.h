@@ -1,7 +1,7 @@
 
 #include "dataset.h"
 
-#define TIC_PROCESS_TIMEOUT   10     // secondes
+#define TIC_PROCESS_TIMEOUT   30     // secondes
 
 
 #define TIC_PROCESS_TOPIC_BUFFER_SIZE 128

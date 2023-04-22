@@ -8,6 +8,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include "freertos/event_groups.h"
 #include "esp_netif.h"
 #include "esp_log.h"
 #include "esp_tls.h"
@@ -17,17 +18,28 @@
 #include "process.h"
 #include "status.h"
 #include "mqtt.h"
+#include "nvs_utils.h"
+#include "tic_console.h"
 
 static const char *TAG = "mqtt.c";
 
-typedef struct mqtt_task_param_s {
-    //QueueHandle_t from_decoder;
-    esp_mqtt_client_handle_t esp_client;
-} mqtt_task_param_t;
 
+esp_mqtt_client_handle_t s_esp_client = NULL;
+EventGroupHandle_t s_client_evt_group = NULL;
+#define BIT_CLIENT_RESTART   BIT0
 
+// messages à envoyer
 static QueueHandle_t s_to_mqtt = NULL;
 
+
+// paramètres de connexion au broker mqtt
+static psk_hint_key_t s_psk_hint_key = {0};
+static esp_mqtt_client_config_t s_mqtt_cfg = {
+        .broker.verification.psk_hint_key = &s_psk_hint_key
+};
+
+
+static tic_error_t update_mqtt_config (esp_mqtt_client_config_t *cfg);
 
 static void log_error_if_nonzero(const char *message, int error_code)
 {
@@ -38,7 +50,6 @@ static void log_error_if_nonzero(const char *message, int error_code)
 
 // pour le debug
 //static int32_t s_allocated_msg = 0;
-
 // Alloue/libere un mqtt_msg_t  
 // pour la communication entre tâches process.c et mqtt.c
 mqtt_msg_t * mqtt_msg_alloc()
@@ -78,7 +89,6 @@ void mqtt_msg_free(mqtt_msg_t *msg)
         msg->payload = NULL;
     }
     free( msg );
-    
     //s_allocated_msg -= 1;
 }
 
@@ -101,6 +111,7 @@ tic_error_t mqtt_receive_msg( mqtt_msg_t *msg )
     return TIC_OK;
 }
 
+
 /*
  * @brief Event handler registered to receive MQTT events
  *
@@ -119,10 +130,10 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     switch ((esp_mqtt_event_id_t)event_id) {
     case MQTT_EVENT_BEFORE_CONNECT:
         ESP_LOGI(TAG, "MQTT_EVENT_BEFORE CONNECT");
-        status_mqtt_update( "connecting..." );
+        status_mqtt_update ("connecting...");
         break;
     case MQTT_EVENT_CONNECTED:
-        ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
+        ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED to %s", (s_mqtt_cfg.broker.address.uri) );
         status_mqtt_update( "connected" );
         break;
     case MQTT_EVENT_DISCONNECTED:
@@ -159,34 +170,81 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     }
 }
 
-
-void mqtt_task( void *pvParams )
+// initialise le client MQTT au lancement et lorsque les parametres changent
+static void mqtt_client_task( void *pvParams )
 {
-    ESP_LOGI( TAG, "mqtt_task()");
+    ESP_LOGD( TAG, "mqtt_client_task()");
 
-    mqtt_task_param_t *params = (mqtt_task_param_t *)pvParams;
-
-    // demarre le client MQTT fourni avec EDF-IDF
-    if( params->esp_client )
+    tic_error_t tic_err;
+    esp_err_t esp_err;
+    for(;;)
     {
-        esp_err_t err = esp_mqtt_client_start(params->esp_client);
-        if( err != ESP_OK ) {
-            ESP_LOGE( TAG, "esp_mqtt_client_start() erreur %d", err);
+        // attend un signal pour recommencer la sequence d'initialisation
+        /*EventBits_t bits = */ xEventGroupWaitBits(s_client_evt_group, (BIT_CLIENT_RESTART), pdTRUE, pdFALSE, portMAX_DELAY);
+
+        // recupère les parametres de connexion dans le NVS
+        tic_err = update_mqtt_config (&s_mqtt_cfg);
+        if (tic_err != TIC_OK)
+        {
+            // inutile de continuer si les paramètres sont incorrects
+            continue;   // msg d'erreur loggué par update_mqtt_config()
         }
+
+        // cree un nouveau client et efface l'ancien
+        if (s_esp_client)
+        {
+            if( esp_mqtt_client_destroy (s_esp_client) == ESP_OK )
+            {
+                ESP_LOGD( TAG, "client mqtt destroyed" );
+                s_esp_client = NULL;
+            }
+        }
+        s_esp_client = esp_mqtt_client_init (&s_mqtt_cfg);
+        if(!s_esp_client)
+        {
+            ESP_LOGE( TAG, "esp_mqtt_client_init() failed");
+            continue;
+        }
+
+        // enregistre le handler
+        esp_err = esp_mqtt_client_register_event(s_esp_client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL );
+        if( esp_err != ESP_OK )
+        {
+            ESP_LOGE( TAG, "esp_mqtt_client_register_event() erreur %d", esp_err);
+            continue;
+        }
+
+        // demarre le client MQTT 
+        esp_err = esp_mqtt_client_start(s_esp_client);
+        if( esp_err != ESP_OK )
+        {
+            ESP_LOGE( TAG, "esp_mqtt_client_start() erreur %d", esp_err);
+            continue;
+        }
+        ESP_LOGI( TAG, "client mqtt started");
     }
 
-    TickType_t max_ticks = MQTT_TIC_TIMEOUT_SEC * 1000 / portTICK_PERIOD_MS; 
+    ESP_LOGE( TAG, "fatal: mqtt_client_task exited" );
+    esp_mqtt_client_destroy( s_esp_client );
+    vTaskDelete(NULL);
+}
+
+
+static void mqtt_publish_task( void *pvParams )
+{
+    ESP_LOGI( TAG, "mqtt_publish_task()");
+
+    //TickType_t max_ticks = MQTT_TIC_TIMEOUT_SEC * 1000 / portTICK_PERIOD_MS; 
     mqtt_msg_t *msg = NULL;
     for(;;)
     {
         mqtt_msg_free(msg);    // libère les buffers alloués par process_task
         msg = NULL;
 
-        BaseType_t msg_received = xQueueReceive( s_to_mqtt, &msg, max_ticks );
+        BaseType_t msg_received = xQueueReceive( s_to_mqtt, &msg, portMAX_DELAY );
         if( msg_received != pdTRUE )
         {
-            ESP_LOGI( TAG, "Aucun message MQTT à envoyer depuis %d secondes", TIC_PROCESS_TIMEOUT );
-            continue;
+            continue;   // timeout
         }
         if( msg==NULL )
         {
@@ -207,167 +265,127 @@ void mqtt_task( void *pvParams )
         ESP_LOGD( TAG, "dummy_mqtt topic\n%s", msg->topic );
         ESP_LOGD( TAG, "dummy_mqtt payload\n%s", msg->payload );
 
-        if( params->esp_client )
+        if( s_esp_client )
         {
-            esp_mqtt_client_publish( params->esp_client, msg->topic, msg->payload, 0, 0, 0);
-            // ingore les erreurs
+            esp_mqtt_client_publish( s_esp_client, msg->topic, msg->payload, 0, 0, 0);
+            // ignore erreurs
         }
     }
-
-    ESP_LOGE( TAG, "fatal: mqtt_task exited" );
-    esp_mqtt_client_destroy( params->esp_client );
+    ESP_LOGE( TAG, "fatal: mqtt_publish_task exited" );
     vTaskDelete(NULL);
 }
 
-static const uint8_t psk_key[] = PSK_KEY ;
 
-static const psk_hint_key_t psk_hint_key = {
-        .key = psk_key,
-        .key_size = sizeof(psk_key),
-        .hint = PSK_IDENTITY
-    };
-
-static void log_mqtt_cfg( esp_mqtt_client_config_t cfg )
+static void log_mqtt_cfg( const esp_mqtt_client_config_t *cfg )
 {
-    ESP_LOGI( TAG, "mqtt_broker_hostname: %s", cfg.broker.address.hostname );
-    ESP_LOGI( TAG, "mqtt_broker_port: %"PRIi32, cfg.broker.address.port );
-    ESP_LOGI( TAG, "mqtt_broker_transport: %d", cfg.broker.address.transport );
-    ESP_LOGI( TAG, "mqtt_psk_identity: %s", cfg.broker.verification.psk_hint_key->hint );
-    ESP_LOGI( TAG, "mqtt_psk_key_size: %d", cfg.broker.verification.psk_hint_key->key_size );
-    for( int i=0;  i < cfg.broker.verification.psk_hint_key->key_size; i++ )
+    ESP_LOGD( TAG, "mqtt_broker_uri: %s", 
+        (cfg->broker.address.uri ? cfg->broker.address.uri : "NULL") );
+    ESP_LOGD( TAG, "mqtt_psk_identity: %s", 
+        (cfg->broker.verification.psk_hint_key->hint ? cfg->broker.verification.psk_hint_key->hint : "NULL") );
+    ESP_LOGD( TAG, "mqtt_psk_key_size: %d", cfg->broker.verification.psk_hint_key->key_size );
+    for( int i=0;  i < cfg->broker.verification.psk_hint_key->key_size; i++ )
     {
-        ESP_LOGI( TAG, "mqtt_psk_key[%d]: %#x", i, cfg.broker.verification.psk_hint_key->key[i] );
+        ESP_LOGD( TAG, "mqtt_psk_key[%d]: %#x", i, cfg->broker.verification.psk_hint_key->key[i] );
     }
+}
+
+
+static tic_error_t update_mqtt_config (esp_mqtt_client_config_t *cfg)
+{
+    tic_error_t err;
+    struct address_t *addr = &(s_mqtt_cfg.broker.address);
+    struct psk_key_hint *hint_key = (struct psk_key_hint *)(cfg->broker.verification.psk_hint_key);
+
+    // URI du broker MQTT
+    if(addr->uri)
+    {
+        free((void*)(addr->uri));    // cast en void* pour éviter un warning sur type (const char*)
+        addr->uri = NULL;
+    }
+    err = console_nvs_get_string( TIC_NVS_MQTT_BROKER, (char **)(&(addr->uri)) );
+    if (err != TIC_OK)
+    {
+        ESP_LOGE (TAG, "URI du broker MQTT non configurée");
+        return err;
+    }
+
+    // preshared key
+    if (hint_key->hint)
+    {
+        free((void*)(hint_key->hint));
+        hint_key->hint = NULL;
+    }
+    err = console_nvs_get_string( TIC_NVS_MQTT_PSK_ID, (char **)(&(hint_key->hint)) );
+    if (err != TIC_OK)
+    {
+        ESP_LOGE (TAG, "Identité de la clé PSK non configurée");
+        return err;
+    }
+
+    if (hint_key->key)
+    {
+        free((void*)(hint_key->key));
+        hint_key->key = NULL;
+    }
+    err = console_nvs_get_blob( TIC_NVS_MQTT_PSK_KEY, (char **)(&(hint_key->key)), (size_t *)(&(hint_key->key_size)) );
+    if (err != TIC_OK)
+    {
+        ESP_LOGE (TAG, "Valeur de la clé PSK non configurée");
+        return err;
+    }
+    log_mqtt_cfg (cfg);
+    return TIC_OK;
+}
+
+
+tic_error_t mqtt_client_restart()
+{
+    xEventGroupSetBits( s_client_evt_group, BIT_CLIENT_RESTART);
+    return TIC_OK;
 }
 
 
 BaseType_t mqtt_task_start( int dummy )
 {
-    //esp_log_level_set("*", ESP_LOG_INFO);
-    //esp_log_level_set( TAG, ESP_LOG_INFO );
-    //esp_log_level_set("MQTT_CLIENT", ESP_LOG_VERBOSE);
-    //esp_log_level_set("TRANSPORT_BASE", ESP_LOG_VERBOSE);
-    //esp_log_level_set("esp-tls", ESP_LOG_VERBOSE);
-    //esp_log_level_set("TRANSPORT", ESP_LOG_VERBOSE);
-    //esp_log_level_set("OUTBOX", ESP_LOG_VERBOSE);
+    // Queue pour recevoir les messages formattés à publier
+    s_to_mqtt = xQueueCreate( 5, sizeof( mqtt_msg_t * ) );
+    if( s_to_mqtt==NULL )
+    {
+        ESP_LOGE( TAG, "xCreateQueue() failed" );
+        return pdFALSE;
+    }
 
-    esp_mqtt_client_handle_t client = NULL;
+    // event group pour demander un redemarrage du client mqtt
+    s_client_evt_group = xEventGroupCreate();
+    if( s_client_evt_group==NULL )
+    {
+        ESP_LOGE( TAG, "xEventGroupCreate() failed" );
+        return pdFALSE;
+    }
 
-    esp_mqtt_client_config_t mqtt_cfg = {
-        .broker.address.hostname = BROKER_HOST,
-        .broker.address.port = BROKER_PORT,
-        .broker.address.transport = MQTT_TRANSPORT_OVER_SSL,
-        .broker.verification.psk_hint_key = &psk_hint_key,
-    };
+    BaseType_t task_created;
 
+    // en mode dummy, le client ne s'executera pas et s_esp_client restera NULL à tout jamais
     if( !dummy )
     {
-        log_mqtt_cfg( mqtt_cfg );
-        client = esp_mqtt_client_init(&mqtt_cfg);
-        if( client == NULL )
+
+        task_created = xTaskCreate( mqtt_client_task, "mqtt_client", 4096, /*task_params*/ NULL, 12, NULL);
+        if( task_created != pdPASS )
         {
-            ESP_LOGE( TAG, "esp_mqtt_client_init() failed");
-            return pdFALSE;
+            ESP_LOGE( TAG, "xTaskCreate() failed");
+            return task_created;
         }
-    
-        esp_err_t err;
-        // The last argument may be used to pass data to the event handler, in this example mqtt_event_handler 
-        err = esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL );
-        if( err != ESP_OK ) {
-            ESP_LOGE( TAG, "esp_mqtt_client_register_event() erreur %d", err);
-            return pdFALSE;
-        }
+        mqtt_client_restart();    // lance le client à la création de la tâche
     }
 
-    // passe le client_handle à la tâche
-    mqtt_task_param_t *task_params = calloc( 1, sizeof( mqtt_task_param_t ) );
-    if( task_params==NULL )
-    {
-        ESP_LOGE( TAG, "calloc() failed" );
-        return pdFALSE;
-    }
-    task_params->esp_client = client;
-
-    // Queue pour recevoir les messages formattés à publier
-    s_to_mqtt = xQueueCreate( 5, sizeof( mqtt_msg_t * ) );
-    if( s_to_mqtt==NULL )
-    {
-        ESP_LOGE( TAG, "xCreateQueue() failed" );
-        return pdFALSE;
-    }
-
-    // create mqtt client task
-    BaseType_t task_created = xTaskCreate( mqtt_task, "mqtt_task", 4096, task_params, 12, NULL);
+    // create mqtt publish task
+    task_created = xTaskCreate( mqtt_publish_task, "mqtt_publish", 4096, /*task_params*/ NULL, 12, NULL);
     if( task_created != pdPASS )
     {
         ESP_LOGE( TAG, "xTaskCreate() failed");
+        return task_created;
+
     }
-    return task_created;
+
+    return pdPASS;
 }
-
-
-/*
-void mqtt_task_dummy( void *pvParams )
-{
-    ESP_LOGI( TAG, "mqtt_task_dummy()");
-
-    TickType_t max_ticks = MQTT_TIC_TIMEOUT_SEC * 1000 / portTICK_PERIOD_MS; 
-    mqtt_msg_t *msg = NULL;
-    for(;;)
-    {
-        mqtt_msg_free(msg);    // libère les buffers alloués par process_task
-        msg = NULL;
-
-        BaseType_t msg_received = xQueueReceive( s_to_mqtt, &msg, max_ticks );
-        if( msg_received != pdTRUE )
-        {
-            ESP_LOGI( TAG, "Aucun message MQTT à envoyer depuis %d secondes (%p)", TIC_PROCESS_TIMEOUT, msg );
-            continue;
-        }
-        if( msg==NULL )
-        {
-            ESP_LOGD( TAG, "Message MQTT null");
-            continue;
-        }
-        if( msg->topic==NULL || msg->topic[0]=='\0' )
-        {
-            ESP_LOGD( TAG, "Topic MQTT absent");
-            continue;
-        }
-        if( msg->payload==NULL || msg->payload[0]=='\0' )
-        {
-            ESP_LOGD( TAG, "Payload MQTT absent");
-            continue;
-        }
-
-        ESP_LOGD( TAG, "dummy_mqtt topic\n%s", msg->topic );
-        ESP_LOGD( TAG, "dummy_mqtt payload\n%s", msg->payload );
-
-    }
-    ESP_LOGE( TAG, "fatal: mqtt_task exited" );
-    vTaskDelete(NULL);
-}
-*/
-/*
-BaseType_t mqtt_dummy_task_start( )
-{
-    esp_log_level_set( TAG, ESP_LOG_DEBUG );
-
-
-    // Queue pour recevoir les messages formattés à publier
-    s_to_mqtt = xQueueCreate( 5, sizeof( mqtt_msg_t * ) );
-    if( s_to_mqtt==NULL )
-    {
-        ESP_LOGE( TAG, "xCreateQueue() failed" );
-        return pdFALSE;    // inutile de continuer....
-    }
-
-    // create mqtt client task
-    BaseType_t task_created = xTaskCreate( mqtt_task_dummy, "mqtt_task_dummy", 2048, NULL, 12, NULL);
-    if( task_created != pdPASS )
-    {
-        ESP_LOGE( TAG, "xTaskCreate() failed");
-    }
-    return task_created;
-}
-*/

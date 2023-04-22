@@ -246,7 +246,7 @@ static void process_task( void *pvParams )
         BaseType_t ds_received = xQueueReceive( s_to_process, &ds, portMAX_DELAY );
         if( ds_received != pdTRUE )
         {
-            //ESP_LOGD( TAG, "Aucune trame téléinfo reçue depuis %d secondes", TIC_PROCESS_TIMEOUT );
+            ESP_LOGD( TAG, "Aucune trame téléinfo reçue depuis %d secondes", TIC_PROCESS_TIMEOUT );
             continue;
         }
 

@@ -1,11 +1,5 @@
 
 
-/* Intellisense bullshit */
-//#undef __linux__
-
-//#define LWIP_DEBUG 1
-
-
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -23,6 +17,7 @@
 #include "clock.h"
 #include "status.h"
 #include "bouton.h"
+#include "tic_console.h"
 
 
 #define TZSTRING_CET         "CET-1CEST,M3.5.0/2,M10.5.0/3"    // [Europe/Paris]
@@ -33,7 +28,6 @@ static const char *TAG = "main_app";
 
 void nvs_initialise(void)
 {
-    //Initialize NVS
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
       ESP_ERROR_CHECK(nvs_flash_erase());
@@ -45,16 +39,21 @@ void nvs_initialise(void)
 
 void app_main(void)
 {
-
-
     ESP_LOGI(TAG, "[APP] Startup..");
     ESP_LOGI(TAG, "[APP] Free memory: %lu bytes", esp_get_free_heap_size());
     ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
 
     status_init();
-    nvs_initialise();    // required for wifi driver
-    wifi_task_start();
 
+    // non volatile storage utilisé pour
+    //   - wifi driver
+    //   - phy calibration data
+    //   - wifi credentials
+    //   - mqtt broker adress
+    nvs_initialise();
+   
+    wifi_task_start();
+    console_task_start();
 
     setenv( "TZ", TZSTRING_CET, 1);
     tzset();
@@ -66,13 +65,14 @@ void app_main(void)
     tic_decode_task_start();
     process_task_start();
     mqtt_task_start( 0 );   // 0=lance le client mqtt   1=dummy/debug
-    clock_task_start();
+//    clock_task_start();
 
     esp_log_level_set("*", ESP_LOG_INFO);
-    //esp_log_level_set(TAG, ESP_LOG_DEBUG);
-    esp_log_level_set( "process.c",ESP_LOG_INFO);
-    esp_log_level_set( "puissance.c",ESP_LOG_INFO);
-    esp_log_level_set( "mqtt.c",ESP_LOG_INFO);
+    esp_log_level_set("cmd_tic.c", ESP_LOG_INFO);
+    esp_log_level_set("wifi.c", ESP_LOG_INFO);
+    esp_log_level_set("process.c",ESP_LOG_INFO);
+    esp_log_level_set("puissance.c",ESP_LOG_INFO);
+    esp_log_level_set("mqtt.c",ESP_LOG_INFO);
     esp_log_level_set("wifi", ESP_LOG_WARN);
     esp_log_level_set("wifi_init", ESP_LOG_WARN);
     esp_log_level_set("ticled.c", ESP_LOG_INFO);

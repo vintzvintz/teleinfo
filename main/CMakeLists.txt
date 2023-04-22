@@ -16,12 +16,22 @@ set(srcs
     "ticled.c"
     "uart_events.c"
     "wifi.c"
-    "bouton.c"     )
+    "bouton.c"
+    "nvs_utils.c"
+    "console/console.c"
+    "console/cmd_nvs.c" 
+    "console/cmd_tic.c"
+    "console/cmd_system.c" 
+    )
 
+
+set(includes 
+    "include"
+    "console" )
 
 
 idf_component_register( SRCS ${srcs} 
-                        INCLUDE_DIRS "include"
+                        INCLUDE_DIRS ${includes}
                         REQUIRES
                             lwip
                             driver
@@ -29,6 +39,8 @@ idf_component_register( SRCS ${srcs}
                             esp_event
                             esp_netif
                             esp-tls
+                            spi_flash
                             nvs_flash
                             mqtt
+                            console
                          )
