@@ -33,7 +33,7 @@ static QueueHandle_t s_to_oled = NULL;
  * oled_update est appelé depuis les autres tâches pour envoyer des infos à l'afficheur
  */
 extern "C"
-BaseType_t oled_update( display_event_type_t type, const char* txt )
+tic_error_t oled_update( display_event_type_t type, const char* txt )
 {
     if( s_to_oled == NULL )
     {
@@ -48,9 +48,9 @@ BaseType_t oled_update( display_event_type_t type, const char* txt )
     if( xQueueSend( s_to_oled, &evt, 0 ) != pdTRUE ) 
     {
         ESP_LOGI( TAG, "oled_update() echec. Probablement queue pleine. Type %#x '%s'", evt.info, evt.txt );
-        return pdFALSE;
+        return TIC_ERR;
     } 
-    return pdTRUE;
+    return TIC_OK;
 }
 
 const SPlatformI2cConfig tic_default_display_config = { 
@@ -61,11 +61,6 @@ const SPlatformI2cConfig tic_default_display_config = {
     .frequency = 0 
 };
 
-/*
-typedef struct oled_task_param_s {
-    QueueHandle_t to_oled;
-} oled_task_param_t;
-*/
 
 const char *LABEL_UART = "UART";
 const char *LABEL_TIC  = " TIC";
@@ -244,7 +239,7 @@ static void oled_task(void *pvParams)
 }
 
 
-extern "C" BaseType_t oled_task_start( )
+extern "C" tic_error_t oled_task_start( )
 {
     esp_log_level_set( TAG, ESP_LOG_INFO );
     ESP_LOGD( TAG, "oled_task_start()" );
@@ -254,18 +249,15 @@ extern "C" BaseType_t oled_task_start( )
     if( s_to_oled == NULL )
     {
         ESP_LOGE( TAG, "xCreateQueue() failed" );
-        return pdFALSE;
+        return TIC_ERR_APP_INIT;
     }
 
-    //oled_task_param_t *task_params = (oled_task_param_t *)malloc( sizeof(oled_task_param_t) );
-    //if( task_params == NULL )
-    //{
-    //    ESP_LOGE( TAG, "malloc() failed" );
-    //    return pdFALSE;
-    // }
-    //task_params->to_oled = to_oled;
-    xTaskCreatePinnedToCore( oled_task, "oled_task", 8192, NULL, 1, NULL, ARDUINO_RUNNING_CORE );
-    return pdTRUE;
+    if( xTaskCreate( oled_task, "oled_task", 8192, NULL, 2, NULL ) != pdPASS )
+    { 
+        ESP_LOGE( TAG, "xTaskCreate() failed" );
+        return TIC_ERR_APP_INIT;
+    }
+    return TIC_OK;
 }
 
 
