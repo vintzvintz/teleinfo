@@ -2,4 +2,6 @@
 
 #define CLOCK_SERVER_NAME "fr.pool.ntp.org"
 
-void clock_task_start();
+#include "errors.h"
+
+tic_error_t clock_task_start();
