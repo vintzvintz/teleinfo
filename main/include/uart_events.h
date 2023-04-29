@@ -1,6 +1,7 @@
 
+#include "errors.h"
 
-#define UART_TELEINFO_NUM  UART_NUM_1
-#define TIC_UART_THRESOLD  16
 
-void uart_task_start( );
+#define TIC_UART_THRESOLD  20
+
+tic_error_t uart_task_start( );
