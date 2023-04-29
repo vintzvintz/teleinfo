@@ -39,7 +39,7 @@ void puissance_init()
 // recupere un point dans le ring buffer
 // i=0 : le plus récent   
 //i=cnt : le plus ancien
-const east_point_t* get_east_point( int8_t i )
+static const east_point_t* get_east_point( int8_t i )
 {
     int8_t idx = ( i + s_east_current ) % TIC_LAST_POINTS_CNT;
     return &(s_east_rb[idx]);

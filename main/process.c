@@ -150,7 +150,6 @@ int compare_datasets( const dataset_t *ds1, const dataset_t *ds2 )
 static tic_error_t datasets_to_json( char *buf, size_t size, const dataset_t *ds )
 {
     size_t pos = 0;
-
     char time_buf[30];
     get_time_iso8601( time_buf, sizeof(time_buf) );
 
@@ -201,6 +200,7 @@ static tic_error_t set_payload( char *buf, size_t size, dataset_t *ds )
     return datasets_to_json( buf, size, ds );
 }
 
+
 static tic_error_t build_mqtt_msg( mqtt_msg_t *msg, dataset_t *ds  )
 {
     ESP_LOGD( TAG, "build_mqtt_msg() msg=%p ds=%p", msg, ds);
@@ -224,15 +224,13 @@ static tic_error_t build_mqtt_msg( mqtt_msg_t *msg, dataset_t *ds  )
 }
 
 
-
 static void process_task( void *pvParams )
 {
     ESP_LOGI( TAG, "process_task()");
 
-    //process_task_param_t *params = (process_task_param_t *)pvParams;
-    // TickType_t max_ticks = TIC_PROCESS_TIMEOUT * 1000 / portTICK_PERIOD_MS; 
     mqtt_msg_t *msg = NULL;
     dataset_t *ds = NULL;
+    tic_error_t err;
 
     for(;;)
     {
@@ -264,10 +262,11 @@ static void process_task( void *pvParams )
         {
             continue;   // erreur logguee dans mqtt_alloc_msg()
         }
-        
-        if( build_mqtt_msg( msg, ds ) != TIC_OK)
+
+        err = build_mqtt_msg (msg, ds);
+        if(err != TIC_OK)
         {
-            ESP_LOGD( TAG, "... build_mqtt_msg() renvoie != TIC_OK" );
+            ESP_LOGE (TAG, "build_mqtt_msg() erreur %d", err);
             continue;    // erreur logguee dans build_mqtt_msg()
         }
 
@@ -286,7 +285,7 @@ tic_error_t process_receive_datasets( dataset_t *ds )
 {
     if( s_to_process == NULL )
     {
-        ESP_LOGD( TAG, "queue s_to_process pas initialisée" );
+        ESP_LOGE( TAG, "queue s_to_process pas initialisée" );
         return TIC_ERR;
     }
 

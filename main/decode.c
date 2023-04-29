@@ -20,14 +20,20 @@ static const char *TAG = "decode.c";
 #define CHAR_CR   '\r'
 #define CHAR_LF   '\n'
 
+/*
 #define TIC_MODE_STANDARD 1
 
 // separateur dans un groupe de données
 #ifdef TIC_MODE_HISTORIQUE
-    #define TIC_SEPARATOR  ' '    /* SPACE */
+    #define TIC_SEPARATOR  0x20    // SPACE
 #elif defined TIC_MODE_STANDARD
-    #define TIC_SEPARATOR  0x09    /* TAB */
+    #define TIC_SEPARATOR  0x09    // TAB
 #endif
+*/
+
+
+#define TIC_SEPARATOR  0x20   
+
 
 // alias pour les tailles de buffers
 #define TIC_SIZE_BUF0 TIC_SIZE_ETIQUETTE
@@ -401,7 +407,7 @@ size_t decode_receive_bytes( void *buf , size_t length )
 {
     if( s_to_decoder == NULL )
     {
-        ESP_LOGD( TAG, "queue s_to_decoder pas initialisée" );
+        ESP_LOGD( TAG, "decodeur non initialisé" );
         return 0;
     }
     return xStreamBufferSend( s_to_decoder, buf, length, portMAX_DELAY);
@@ -410,7 +416,7 @@ size_t decode_receive_bytes( void *buf , size_t length )
 // Create a task to decode teleinfo raw bytestream received from uart
 void tic_decode_task_start( )
 {
-    esp_log_level_set( TAG, ESP_LOG_DEBUG );
+    //esp_log_level_set( TAG, ESP_LOG_DEBUG );
 
     /*
     tic_taskdecode_params_t *tic_task_params = malloc( sizeof(tic_taskdecode_params_t) );

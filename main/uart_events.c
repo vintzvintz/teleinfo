@@ -155,7 +155,7 @@ static void uart_mode_detect_task(void *pvParameters)
 }
 
 
-void uart_reset()
+static void uart_reset()
 {
     uart_flush_input(UART_TELEINFO_NUM);
     xQueueReset(s_uart1_queue);
@@ -196,11 +196,12 @@ static void uart_rcv_task(void *pvParameters)
                     {
                         ESP_LOGE( TAG, "%d bytes perdus sur %d reçus", (length_read-length_sent), length_read);
                     }
-                    status_rcv_uart (get_mode(), 0);
 
-                    // decremente le compteur d'erreur
+                    // decremente le compteur d'erreur quand des données sont reçues
                     if ( (err_cnt--) < 0 )
                     {
+                        // met a jour le statut s'il n'y a plus d'erreurs
+                        status_rcv_uart (get_mode(), 0);
                         err_cnt = 0;
                     }
 

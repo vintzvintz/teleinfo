@@ -39,6 +39,22 @@ void nvs_initialise(void)
 
 void app_main(void)
 {
+    esp_log_level_set("*", ESP_LOG_INFO);
+
+    esp_log_level_set("cmd_tic.c", ESP_LOG_INFO);
+    esp_log_level_set("wifi.c", ESP_LOG_INFO);
+    esp_log_level_set("process.c",ESP_LOG_INFO);
+    esp_log_level_set("puissance.c",ESP_LOG_INFO);
+    esp_log_level_set("mqtt.c",ESP_LOG_INFO);
+    esp_log_level_set("wifi", ESP_LOG_WARN);
+    esp_log_level_set("wifi_init", ESP_LOG_WARN);
+    esp_log_level_set("uart_events.c", ESP_LOG_DEBUG);
+    esp_log_level_set("status.c", ESP_LOG_DEBUG);
+    //esp_log_level_set("decode.c", ESP_LOG_DEBUG);
+
+
+
+
     ESP_LOGI(TAG, "[APP] Startup..");
     ESP_LOGI(TAG, "[APP] Free memory: %lu bytes", esp_get_free_heap_size());
     ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
@@ -67,14 +83,5 @@ void app_main(void)
     mqtt_task_start( 0 );   // 0=lance le client mqtt   1=dummy/debug
     clock_task_start();
 
-    esp_log_level_set("*", ESP_LOG_INFO);
-    esp_log_level_set("cmd_tic.c", ESP_LOG_INFO);
-    esp_log_level_set("wifi.c", ESP_LOG_INFO);
-    esp_log_level_set("process.c",ESP_LOG_INFO);
-    esp_log_level_set("puissance.c",ESP_LOG_INFO);
-    esp_log_level_set("mqtt.c",ESP_LOG_INFO);
-    esp_log_level_set("wifi", ESP_LOG_WARN);
-    esp_log_level_set("wifi_init", ESP_LOG_WARN);
-    esp_log_level_set("status.c", ESP_LOG_DEBUG);
 }
 
