@@ -2,7 +2,7 @@
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/stream_buffer.h"
+#include "freertos/queue.h"
 #include "esp_log.h"
 
 
@@ -15,24 +15,16 @@
 
 static const char *TAG = "decode.c";
 
-#define CHAR_STX  0x02    //   start of text - début d'une trame
-#define CHAR_ETX  0x03    //   end of text - fin d'une trame
-#define CHAR_CR   '\r'
-#define CHAR_LF   '\n'
+#define CHAR_STX   0x02    //   start of text - début d'une trame
+#define CHAR_ETX   0x03    //   end of text - fin d'une trame
+#define CHAR_CR    '\r'
+#define CHAR_LF    '\n'
+#define CHAR_SPACE ' '
+#define CHAR_TAB   '\t'
 
-/*
-#define TIC_MODE_STANDARD 1
-
-// separateur dans un groupe de données
-#ifdef TIC_MODE_HISTORIQUE
-    #define TIC_SEPARATOR  0x20    // SPACE
-#elif defined TIC_MODE_STANDARD
-    #define TIC_SEPARATOR  0x09    // TAB
-#endif
-*/
-
-
-#define TIC_SEPARATOR  0x20   
+#define TIC_SEPARATOR_INCONNU     0x00
+#define TIC_SEPARATOR_HISTORIQUE  CHAR_SPACE
+#define TIC_SEPARATOR_STANDARD    CHAR_TAB
 
 
 // alias pour les tailles de buffers
@@ -41,19 +33,25 @@ static const char *TAG = "decode.c";
 #define TIC_SIZE_BUF2 TIC_SIZE_VALUE
 #define TIC_SIZE_BUF3 TIC_SIZE_CHECKSUM
 
-/*
-typedef struct tic_taskdecode_params_s {
-    StreamBufferHandle_t from_uart;
-    QueueHandle_t to_process;
-} tic_taskdecode_params_t;
-*/
+#define TIC_MAX_DATASETS 99
 
-static StreamBufferHandle_t s_to_decoder = NULL;
+#define INCOMING_QUEUE_SIZE  10
+static QueueHandle_t s_incoming_bytes = NULL;
+
+typedef struct {
+    tic_char_t *buf;
+    size_t len;
+    tic_mode_t mode;
+} tic_bytes_t;
 
 
 // tic_frame_s contient les données d'une trame en cours de réception
 typedef struct tic_decoder_s {
     
+    // mode historique ou standard
+    tic_mode_t mode;
+    tic_char_t sep;
+
     // etat de la frame complète
     uint8_t stx_received;
     dataset_t *datasets;         // linked list des datasets complets reçus
@@ -158,17 +156,19 @@ static tic_error_t decode_dataset_end( tic_decoder_t *td ) {
     // calcule le checksum
     uint32_t s1 = 0;
     addbuf( &s1, buf_etiquette );
-    s1 += TIC_SEPARATOR;
+    s1 += td->sep;
     if( buf_horodate != NULL )
     {
         addbuf( &s1, buf_horodate );
-        s1 += TIC_SEPARATOR;
+        s1 += td->sep;
     }
     addbuf( &s1, buf_valeur );
-    #ifdef TIC_MODE_STANDARD
-        // le separateur précédant le checksum est compté en mode standard mais pas en mode historique
-        s1 += TIC_SEPARATOR;
-    #endif
+
+    // le separateur précédant le checksum est compté en mode standard mais pas en mode historique
+    if (td->mode == TIC_MODE_STANDARD)
+    {
+        s1 += td->sep;
+    }
 
     // vérifie le checksum
     tic_char_t checksum = ( s1 & 0x3F ) + 0x20;   // voir doc linky enedis 
@@ -239,8 +239,8 @@ static tic_error_t decode_frame_end( tic_decoder_t *td )
     //dataset_print( td->datasets );
     ESP_LOGD( TAG, "Trame de %"PRIi32" datasets reçue", dataset_count(td->datasets) );
 
-    // signale la réception de données UART
-    status_rcv_tic_frame( 0 );
+    // signale la réception correcte d'une trame
+    status_update_tic_mode( td->mode, 0 );
 
     //uint32_t nb = tic_dataset_count( td->datasets );
     //uint32_t size = tic_dataset_size( td->datasets );
@@ -302,7 +302,7 @@ static tic_error_t decode_data( tic_decoder_t *td, const tic_char_t ch )
     size_t pos = strlen( td->cur_buf );
 
     // cas particulier pour le séparateur 
-    if ( ch == TIC_SEPARATOR )
+    if ( ch == td->sep )
     {
         return decode_separator( td, ch );
     }
@@ -372,28 +372,73 @@ static tic_error_t decode_raw_data( tic_decoder_t* td, const tic_char_t *buf, si
 }
 
 
+static tic_error_t decode_set_mode( tic_decoder_t* td, tic_mode_t mode )
+{
+    if ((td->mode == TIC_MODE_INCONNU) || (mode != td->mode) )
+    {
+        reset_decoder(td);
+    }
+
+    switch(mode)
+    {
+        case TIC_MODE_HISTORIQUE:
+            td->sep = TIC_SEPARATOR_HISTORIQUE;
+            td->mode = TIC_MODE_HISTORIQUE;
+        break;
+        case TIC_MODE_STANDARD:
+            td->sep = TIC_SEPARATOR_STANDARD;
+            td->mode = TIC_MODE_STANDARD;
+        break;
+        default:
+            td->sep = TIC_SEPARATOR_INCONNU;
+            td->mode = TIC_MODE_INCONNU;
+            ESP_LOGE (TAG, "mode tic %0#x inconnu", mode);
+            return TIC_ERR;
+    }
+    return TIC_OK;
+}
+
+
 void tic_decode_task( void *pvParams )
 {
     ESP_LOGD( TAG, "tic_decode_task()" );
-    assert( s_to_decoder );
+    assert( s_incoming_bytes );
 
     // donnees internes du decodeur
     tic_decoder_t *td = calloc(1, sizeof(tic_decoder_t));
-
-    // buffer pour recevoir les données de la tache uart_events 
-    tic_char_t *rx_buf = malloc( RX_BUF_SIZE );
-    if( (td==NULL) || (rx_buf==NULL) )
+    if (td==NULL)
     {
-        ESP_LOGD( TAG, "malloc() failed" );
+        ESP_LOGD( TAG, "calloc() failed" );
         return;
     }
     reset_decoder( td );
 
     tic_error_t err;
-    for(;;) {
-        size_t n = xStreamBufferReceive( s_to_decoder, rx_buf, RX_BUF_SIZE, portMAX_DELAY );
+    tic_bytes_t packet = {0};
 
-        err = decode_raw_data( td, rx_buf, n );
+    for(;;) {
+        free (packet.buf);   // alloué dans uart_events
+        packet.buf=NULL;
+        if( xQueueReceive (s_incoming_bytes, &packet, portMAX_DELAY) != pdPASS )
+        {
+            ESP_LOGE(TAG, "xQueueReceive() failed");
+            continue;
+        }
+
+        // ignore les packets vides
+        if (packet.len==0 || packet.buf==NULL)
+        {
+            continue;
+        }
+
+        // mode historique ou standard ?
+        err = decode_set_mode(td, packet.mode) != TIC_OK;
+        if( err != TIC_OK )
+        {
+            continue;
+        }
+
+        err = decode_raw_data( td, packet.buf, packet.len );
         if( err != TIC_OK )
         {
             ESP_LOGE(TAG, "tic decoder error (%#0x)", err);
@@ -403,14 +448,27 @@ void tic_decode_task( void *pvParams )
 }
 
 // Appelé par la tâche uart_events.c pour envoyer les bytes reçus
-size_t decode_receive_bytes( void *buf , size_t length )
+tic_error_t decode_incoming_bytes( tic_char_t *buf , size_t len, tic_mode_t mode )
 {
-    if( s_to_decoder == NULL )
+    if( s_incoming_bytes == NULL )
     {
         ESP_LOGD( TAG, "decodeur non initialisé" );
         return 0;
     }
-    return xStreamBufferSend( s_to_decoder, buf, length, portMAX_DELAY);
+
+    tic_bytes_t packet = {
+        .buf = buf,
+        .len = len,
+        .mode = mode
+    };
+    if (xQueueSend (s_incoming_bytes, &packet, portMAX_DELAY) != pdPASS)
+    {
+        ESP_LOGE (TAG, "xQueueSend() failed");
+        return TIC_ERR_QUEUEFULL;
+    }
+
+    //return xStreamBufferSend( s_to_decoder, buf, length, portMAX_DELAY);
+    return TIC_OK;
 }
 
 // Create a task to decode teleinfo raw bytestream received from uart
@@ -428,10 +486,10 @@ void tic_decode_task_start( )
     */
 
     // transfere le flux de données brutes depuis l'UART vers le decodeur
-    s_to_decoder = xStreamBufferCreate( DECODE_RCV_BUFFER_SIZE, DECODE_RCV_BUFFER_TRIGGER );
-    if( s_to_decoder == NULL )
+    s_incoming_bytes = xQueueCreate (INCOMING_QUEUE_SIZE, sizeof(tic_bytes_t));
+    if (s_incoming_bytes == NULL)
     {
-        ESP_LOGE( TAG, "Failed to create to_decoder StreamBuffer" );
+        ESP_LOGE (TAG, "xQueueCreate() failed");
     }
 
     xTaskCreate(tic_decode_task, "tic_decode_task", 4096, NULL, 12, NULL);

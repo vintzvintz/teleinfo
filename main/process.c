@@ -67,7 +67,7 @@ static tic_error_t affiche_papp( const dataset_t *ds )
     }
 
     uint32_t papp = strtol( ds_papp->valeur, NULL, 10 );
-    status_papp_update( papp );
+    status_update_puissance (papp);
 
     const dataset_t *ds_horodate = dataset_find( ds, LABEL_HORODATE );
     if( ds_horodate == NULL )

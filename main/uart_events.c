@@ -75,29 +75,37 @@ static bool toggle_baudrate()
 }
 
 
-static int get_mode()
+
+
+static int get_baudrate()
 {
     uint32_t baudrate = 0;
     esp_err_t err = uart_get_baudrate(UART_TELEINFO_NUM, &baudrate);   // ignore error
     if( err != ESP_OK )
     {
         ESP_LOGE (TAG, "get_baudrate() erreur %#x", err);
+        return 0;
     }
+    return (int)baudrate;
+}
 
-    if (baudrate == BAUD_RATE_MODE_HISTORIQUE)
-    {
-        return TIC_MODE_HISTORIQUE;
-    }
+
+
+static int get_tic_mode()
+{
+    int baudrate = get_baudrate();
     if (baudrate == BAUD_RATE_MODE_STANDARD)
     {
         return TIC_MODE_STANDARD;
     }
-
-    ESP_LOGE (TAG, "baudrate %"PRIu32" invalide", baudrate);
+    if (baudrate == BAUD_RATE_MODE_HISTORIQUE) 
+    {
+        return TIC_MODE_HISTORIQUE;
+    }
     return TIC_MODE_INCONNU;
 }
 
-static void uart_mode_detect_task(void *pvParameters)
+static void uart_detect_baudrate_task(void *pvParameters)
 {
     s_toggle_event = xEventGroupCreate();
     if( !s_toggle_event)
@@ -125,11 +133,7 @@ static void uart_mode_detect_task(void *pvParameters)
         /*bits = */xEventGroupWaitBits (s_toggle_event, (BIT_TOGGLE_REQUEST | BIT_TOGGLE_ENABLE), pdTRUE, pdTRUE, portMAX_DELAY);
         ESP_LOGD (TAG, "detect_task: TOGGLE_REQ et TOGGLE_EN were set");
 
-        err = uart_get_baudrate(UART_TELEINFO_NUM, &cur_baudrate);
-        if( err != ESP_OK )
-        {
-            ESP_LOGE (TAG, "uart_get_baudrate() erreur %#x", err);
-        }
+        cur_baudrate = get_baudrate();
 
         switch (cur_baudrate)
         {
@@ -155,7 +159,7 @@ static void uart_mode_detect_task(void *pvParameters)
 }
 
 
-static void uart_reset()
+static void flush_uart()
 {
     uart_flush_input(UART_TELEINFO_NUM);
     xQueueReset(s_uart1_queue);
@@ -165,44 +169,56 @@ static void uart_reset()
 static void uart_rcv_task(void *pvParameters)
 {
     uart_event_t event;
-    uint8_t* dtmp = calloc(1, RD_BUF_SIZE);
+//    uint8_t* dtmp = calloc(1, RD_BUF_SIZE);
+    tic_char_t *tmpbuf = NULL;
+    int uart_err_cnt = 0;
+    int length_read;
 
-    int err_cnt = 0;
-    int length_read, length_sent;
+    tic_error_t err;
 
     for(;;) {
 
         // autodetection mode standard/hstorique
         //ESP_LOGD( TAG, "err_cnt=%d", err_cnt);
-        if (err_cnt >= MAX_ERRORS_CNT)
+        if (uart_err_cnt >= MAX_ERRORS_CNT)
         {
             if( toggle_baudrate() )
             {
-                err_cnt = 0;
+                uart_err_cnt = 0;
             }
         }
 
         //Wait for UART events.
         if(xQueueReceive(s_uart1_queue, (void *)&event, portMAX_DELAY)) {
-            memset(dtmp, 0, RD_BUF_SIZE);
+            //memset(dtmp, 0, RD_BUF_SIZE);
 
             switch(event.type) {
                 //Event of UART receving data
                 case UART_DATA:
                     ESP_LOGD(TAG, "[UART DATA]: %d bytes", event.size);
-                    length_read = uart_read_bytes(UART_TELEINFO_NUM, dtmp, event.size, portMAX_DELAY);
-                    length_sent = decode_receive_bytes(dtmp, length_read );
-                    if( length_sent != length_read )
+                    
+                    tmpbuf = calloc(1, event.size);   //  free() par le recepteur
+                    if (!tmpbuf)
                     {
-                        ESP_LOGE( TAG, "%d bytes perdus sur %d reçus", (length_read-length_sent), length_read);
+                        ESP_LOGE (TAG, "calloc() failed");
+                        continue;
+                    }
+
+                    length_read = uart_read_bytes(UART_TELEINFO_NUM, tmpbuf, event.size, portMAX_DELAY);
+                    err = decode_incoming_bytes (tmpbuf, length_read, get_tic_mode() );
+                    if( err != TIC_OK )
+                    {
+                        ESP_LOGE( TAG, "%d bytes perdus", length_read);
+                        free(tmpbuf);
+                        tmpbuf=NULL;
                     }
 
                     // decremente le compteur d'erreur quand des données sont reçues
-                    if ( (err_cnt--) < 0 )
+                    if ( (uart_err_cnt--) < 0 )
                     {
                         // met a jour le statut s'il n'y a plus d'erreurs
-                        status_rcv_uart (get_mode(), 0);
-                        err_cnt = 0;
+                        status_update_baudrate (get_baudrate(), 0);
+                        uart_err_cnt = 0;
                     }
 
                     //printf("%s",dtmp);
@@ -213,29 +229,29 @@ static void uart_rcv_task(void *pvParameters)
                     // If fifo overflow happened, you should consider adding flow control for your application.
                     // The ISR has already reset the rx FIFO,
                     // As an example, we directly flush the rx buffer here in order to read more data.
-                    uart_reset();
+                    flush_uart();
                     break;
                 //Event of UART ring buffer full
                 case UART_BUFFER_FULL:
                     ESP_LOGI(TAG, "ring buffer full");
                     // If buffer full happened, you should consider encreasing your buffer size
                     // As an example, we directly flush the rx buffer here in order to read more data.
-                    uart_reset();
+                    flush_uart();
                     break;
                 //Event of UART RX break detected
                 case UART_BREAK:
                     //ESP_LOGI(TAG, "uart rx break");   
-                    err_cnt++;                        // la teleinfo n'envoie pas de BREAK donc c'est une erreur
+                    uart_err_cnt++;                        // la teleinfo n'envoie pas de BREAK donc c'est une erreur
                     break;
                 //Event of UART parity check error
                 case UART_PARITY_ERR:
                     //ESP_LOGI(TAG, "uart parity error");
-                    err_cnt++;
+                    uart_err_cnt++;
                     break;
                 //Event of UART frame error
                 case UART_FRAME_ERR:
                     //ESP_LOGI(TAG, "uart frame error");
-                    err_cnt++;
+                    uart_err_cnt++;
                     break;
                 //Others
                 default:
@@ -244,8 +260,8 @@ static void uart_rcv_task(void *pvParameters)
             }
         }
     }
-    free(dtmp);
-    dtmp = NULL;
+//    free(dtmp);
+//    dtmp = NULL;
     vTaskDelete(NULL);
 }
 
@@ -296,7 +312,7 @@ tic_error_t uart_task_start( )
     }
 
     if(    (xTaskCreate(uart_rcv_task, "uart_rcv_task", 4096, NULL, 12, NULL) != pdTRUE) 
-        || (xTaskCreate(uart_mode_detect_task, "uart_mode_detect_task", 4096, NULL, 2, NULL) != pdTRUE ) )
+        || (xTaskCreate(uart_detect_baudrate_task, "uart_detect_baudrate_task", 4096, NULL, 2, NULL) != pdTRUE ) )
     {
         ESP_LOGE( TAG, "xTaskCreate() failed" );
         return TIC_ERR_APP_INIT;

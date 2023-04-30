@@ -64,12 +64,12 @@ void clock_task( void *pvParams )
             now = time(NULL);
             localtime_r( &now, &timeinfo );
             strftime( buf, sizeof(buf), "%H:%M:%S", &timeinfo );
-            status_clock_update( buf );
+            status_update_clock( buf );
         }
         else
         {
             // not synchronised
-            status_clock_update( "no sntp" );
+            status_update_clock( "no sntp" );
         }
         vTaskDelay( 1000 / portTICK_PERIOD_MS );
     }

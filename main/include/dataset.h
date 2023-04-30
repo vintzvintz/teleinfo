@@ -7,6 +7,8 @@
 #define TIC_SIZE_VALUE        128    // donnée ou horodate
 #define TIC_SIZE_CHECKSUM     4      // checksum
 
+// nb maxi de datasets dans une trame
+// #define TIC_MAX_DATASETS    99
 
 typedef char tic_char_t;
 typedef uint32_t tic_dataset_flags_t;
