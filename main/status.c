@@ -201,7 +201,7 @@ void update_oled_ticmode()
 
 void event_baudrate (int baudrate)
 {
-    ESP_LOGD( TAG, "STATUS_EVENT_UART_RCV baudrate %d", baudrate);
+    ESP_LOGD( TAG, "STATUS_EVENT_BAUDRATE baudrate=%d", baudrate);
 
     //*********TODO***********
     //   creer un handler dans TICLED
@@ -220,18 +220,7 @@ void event_baudrate (int baudrate)
 
 void event_tic_mode (tic_mode_t mode )
 {
-    switch(mode)
-    {
-        case TIC_MODE_HISTORIQUE:
-            ESP_LOGD( TAG, "STATUS_EVENT_DECODE_FRAME mode historique");
-            break;
-        case TIC_MODE_STANDARD:
-            ESP_LOGD( TAG, "STATUS_EVENT_DECODE_FRAME mode standard");
-            break;
-        case TIC_MODE_INCONNU:
-        default:
-            ESP_LOGD( TAG, "STATUS_EVENT_DECODE_FRAME mode inconnu");
-    }
+    ESP_LOGD( TAG, "STATUS_EVENT_TIC_MODE mode=%#02x", mode);
 
     //*********TODO***********
     //   creer un handler dans TICLED
@@ -265,12 +254,16 @@ static void event_puissance (int puissance)
 static void event_wifi (const char *ssid)
 {
     ESP_LOGD( TAG, "STATUS_EVENT_WIFI '%s'", (ssid[0] ? ssid : STATUS_CONNECTING) );
+    
+    const char *txt = ( ssid == NULL ) ? STATUS_CONNECTED : ssid;
+    oled_update( DISPLAY_WIFI_STATUS, txt );
 }
 
 
-static void event_mqtt( const char* mqtt_status )
+static void event_mqtt( const char* status )
 {
-    ESP_LOGD( TAG, "STATUS_EVENT_MQTT %s", mqtt_status);
+    ESP_LOGD( TAG, "STATUS_EVENT_MQTT %s", status);
+    oled_update( DISPLAY_MQTT_STATUS, status );
 }
 
 
@@ -353,15 +346,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 }
 */
 
-
-
-/*
-void status_mqtt_update( const char *status )
-{
-    oled_update( DISPLAY_MQTT_STATUS, status );
-}
-*/
-
 // enregistre un handler pour les STATUS_EVENT
 tic_error_t status_register_event_handler (esp_event_handler_t handler_func, int32_t evt_id )
 {
@@ -378,7 +362,6 @@ tic_error_t status_register_event_handler (esp_event_handler_t handler_func, int
     }
     return TIC_OK;
 }
-
 
 
 tic_error_t status_init()
@@ -410,11 +393,11 @@ tic_error_t status_init()
 
     // handler pour l'acquisition/perte d'adresse IP s'enregistre sur l'event loop par défaut
     // TODO ************* deplacer dans OLED ************
-    esp_err = esp_event_handler_instance_register(IP_EVENT,
-                                                         ESP_EVENT_ANY_ID, //IP_EVENT_STA_GOT_IP,
-                                                         &ip_event_handler,
-                                                         NULL,
-                                                         NULL );
+    esp_err = esp_event_handler_instance_register ( IP_EVENT,
+                                                    ESP_EVENT_ANY_ID, //IP_EVENT_STA_GOT_IP,
+                                                    &ip_event_handler,
+                                                    NULL,
+                                                    NULL );
     if ( esp_err != ESP_OK)
     {
         ESP_LOGE (TAG, "esp_event_handler_instance_register() erreur %#02x", esp_err);

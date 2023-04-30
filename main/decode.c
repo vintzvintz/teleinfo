@@ -215,7 +215,7 @@ static tic_error_t decode_dataset_end( tic_decoder_t *td ) {
     else
     {
         // Completer tic_flags.c si cette erreur se produit
-        ESP_LOGE( TAG, "Donnee %s inconnue diffusée par la TIC", ds->etiquette);
+        ESP_LOGW( TAG, "Donnee %s inconnue diffusée par la TIC", ds->etiquette);
     }
 
     // ajoute le nouveau dataset à la liste
