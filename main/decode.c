@@ -52,9 +52,10 @@ typedef struct tic_decoder_s {
     tic_mode_t mode;
     tic_char_t sep;
 
-    // etat de la frame complète
-    uint8_t stx_received;
     dataset_t *datasets;         // linked list des datasets complets reçus
+
+    uint8_t stx_received;  // caractere start of frame recu ?
+
 
     // buffers pour le dataset en cours de reception
     tic_char_t buf0[TIC_SIZE_BUF0];   // etiquette
@@ -70,12 +71,21 @@ typedef struct tic_decoder_s {
 
 static void reset_decoder( tic_decoder_t *td )
 {
-    //ESP_LOGD( TAG, "reset_decoder()");
+    ESP_LOGD( TAG, "reset_decoder()");
+    // conserve mode et separateur
+
     // desalloue les datasets
     dataset_free( td->datasets );
+    td->datasets = NULL;
 
     // met à 0 toutes les variables et buffers 
-    memset( td, 0, sizeof(tic_decoder_t) );
+    td->stx_received = 0;
+    memset (td->buf0, 0 , sizeof(td->buf0));
+    memset (td->buf1, 0 , sizeof(td->buf1));
+    memset (td->buf2, 0 , sizeof(td->buf2));
+    memset (td->buf3, 0 , sizeof(td->buf3));
+    td->cur_buf = td->buf0;
+    td->cur_buf_size = sizeof(td->buf0);
 }
 
 
@@ -115,16 +125,18 @@ static void addbuf( uint32_t *s1, const tic_char_t *buf )
     }
 }
 
-/*
+
 static void tic_decoder_debug_state( const tic_decoder_t *td )
 {
-    ESP_LOGE( TAG, "cur_buf: %p", td->cur_buf );
-    ESP_LOGE( TAG, "buf0: [%s] (addr %p len %d)", td->buf0, td->buf0, strlen(td->buf0) );
-    ESP_LOGE( TAG, "buf1: [%s] (addr %p len %d)", td->buf1, td->buf1, strlen(td->buf1) );
-    ESP_LOGE( TAG, "buf2: [%s] (addr %p len %d)", td->buf2, td->buf2, strlen(td->buf2) );
-    ESP_LOGE( TAG, "buf3: [%s] (addr %p len %d)", td->buf3, td->buf3, strlen(td->buf3) );
+    ESP_LOGI( TAG, "mode=%d, sep=%#02x", td->mode, td->sep);
+    ESP_LOGI (TAG, "stx_received=%d", td->stx_received);
+    ESP_LOGI( TAG, "cur_buf=%p cur_buf_size=%d", td->cur_buf, td->cur_buf_size );
+    ESP_LOGI( TAG, "buf0: [%s] (addr %p len %d)", td->buf0, td->buf0, strlen(td->buf0) );
+    ESP_LOGI( TAG, "buf1: [%s] (addr %p len %d)", td->buf1, td->buf1, strlen(td->buf1) );
+    ESP_LOGI( TAG, "buf2: [%s] (addr %p len %d)", td->buf2, td->buf2, strlen(td->buf2) );
+    ESP_LOGI( TAG, "buf3: [%s] (addr %p len %d)", td->buf3, td->buf3, strlen(td->buf3) );
 }
-*/
+
 
 static tic_error_t decode_dataset_end( tic_decoder_t *td ) {
     //ESP_LOGD( TAG, "dataset_end()");
@@ -315,7 +327,7 @@ static tic_error_t decode_data( tic_decoder_t *td, const tic_char_t ch )
     else
     {
         ESP_LOGE( TAG, "tic_decoder_t overflow. Buffers trop petits (cur_buf_size=%d)", td->cur_buf_size );
-        //tic_decoder_debug_state( td );
+        tic_decoder_debug_state( td );
         return TIC_ERR_OVERFLOW;
     }
 
@@ -362,6 +374,7 @@ static tic_error_t decode_char( tic_decoder_t *td, const tic_char_t ch )  {
 
 static tic_error_t decode_raw_data( tic_decoder_t* td, const tic_char_t *buf, size_t len )
 {
+    assert ((td->mode == TIC_MODE_HISTORIQUE) || (td->mode!=TIC_MODE_HISTORIQUE));
     tic_error_t err = TIC_OK;
     uint32_t i;
     for( i=0; ( err==TIC_OK && i<len ) ; i++ )
@@ -374,6 +387,13 @@ static tic_error_t decode_raw_data( tic_decoder_t* td, const tic_char_t *buf, si
 
 static tic_error_t decode_set_mode( tic_decoder_t* td, tic_mode_t mode )
 {
+
+    if ((mode != TIC_MODE_HISTORIQUE) && (mode!=TIC_MODE_STANDARD) )
+    {
+        ESP_LOGW( TAG, "decode_set_mode( %d )", mode);
+    }
+
+
     if ((td->mode == TIC_MODE_INCONNU) || (mode != td->mode) )
     {
         reset_decoder(td);

@@ -220,8 +220,6 @@ void event_baudrate (int baudrate)
 
 void event_tic_mode (tic_mode_t mode )
 {
-    ESP_LOGD( TAG, "STATUS_EVENT_DECODE_FRAME mode%d", mode);
-
     switch(mode)
     {
         case TIC_MODE_HISTORIQUE:
