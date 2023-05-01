@@ -17,6 +17,6 @@ tic_error_t mqtt_receive_msg( mqtt_msg_t *msg);
 tic_error_t mqtt_client_restart();
 
 // Initialise le client MQTT et lance la tache associee
-BaseType_t mqtt_task_start(int dummy);
-//BaseType_t mqtt_dummy_task_start( );
+tic_error_t mqtt_task_start(int dummy);
+
 

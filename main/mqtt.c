@@ -1,5 +1,3 @@
-/* Intellisense bullshit */
-#undef __linux__
 
 #include <stdio.h>
 #include <stdint.h>
@@ -261,8 +259,8 @@ static void mqtt_publish_task( void *pvParams )
             continue;
         }
 
-        ESP_LOGD( TAG, "dummy_mqtt topic\n%s", msg->topic );
-        ESP_LOGD( TAG, "dummy_mqtt payload\n%s", msg->payload );
+        ESP_LOGD( TAG, "mqtt topic = %s", msg->topic );
+        ESP_LOGD( TAG, "mqtt payload = %s", msg->payload );
 
         if( s_esp_client )
         {
@@ -344,14 +342,14 @@ tic_error_t mqtt_client_restart()
 }
 
 
-BaseType_t mqtt_task_start( int dummy )
+tic_error_t mqtt_task_start( int dummy )
 {
     // Queue pour recevoir les messages formattés à publier
     s_to_mqtt = xQueueCreate( 5, sizeof( mqtt_msg_t * ) );
     if( s_to_mqtt==NULL )
     {
         ESP_LOGE( TAG, "xCreateQueue() failed" );
-        return pdFALSE;
+        return TIC_ERR_APP_INIT;
     }
 
     // event group pour demander un redemarrage du client mqtt
@@ -359,7 +357,7 @@ BaseType_t mqtt_task_start( int dummy )
     if( s_client_evt_group==NULL )
     {
         ESP_LOGE( TAG, "xEventGroupCreate() failed" );
-        return pdFALSE;
+        return TIC_ERR_APP_INIT;
     }
 
     BaseType_t task_created;
@@ -372,7 +370,7 @@ BaseType_t mqtt_task_start( int dummy )
         if( task_created != pdPASS )
         {
             ESP_LOGE( TAG, "xTaskCreate() failed");
-            return task_created;
+            return TIC_ERR_APP_INIT;
         }
         mqtt_client_restart();    // lance le client à la création de la tâche
     }
@@ -382,9 +380,8 @@ BaseType_t mqtt_task_start( int dummy )
     if( task_created != pdPASS )
     {
         ESP_LOGE( TAG, "xTaskCreate() failed");
-        return task_created;
-
+        return TIC_ERR_APP_INIT;
     }
 
-    return pdPASS;
+    return TIC_OK;
 }
