@@ -38,7 +38,7 @@ static const flags_definition_t TIC_DATA_STANDARD[] = {
     {.label="IRMS1",   .flags=NUMERIQUE},          // intensite instantanée
     {.label="URMS1",   .flags=NUMERIQUE},          // tension instantanée
     {.label="SINSTS",  .flags=NUMERIQUE},          // Puissance apparente instantanée
-    {.label="STGE",    .flags=TEXTE},              // flags d'état   
+    {.label="STGE",    .flags=IGNORE},              // flags d'état   
     {.label="DATE",    .flags=TEXTE_TS},           // heure et date courante (sans données)
     {.label="CCASN",   .flags=NUMERIQUE_TS},       // courbe de charge de la periode N (pas 30 minutes)
     {.label="CCASN-1", .flags=NUMERIQUE_TS},       // courbe de charge de la période N-1 (pas 30 minutes)
@@ -77,16 +77,16 @@ static const flags_definition_t TIC_DATA_STANDARD[] = {
 
 static const flags_definition_t TIC_DATA_HISTORIQUE[] = {    
     {.label="ADCO",    .flags=TEXTE},       // numero de serie du compteur
-    {.label="OPTARIF", .flags=TEXTE},       // energie active soutirée
-    {.label="ISOUSC",  .flags=NUMERIQUE},   // intensite souscrite
+    {.label="OPTARIF", .flags=IGNORE},       // energie active soutirée
+    {.label="ISOUSC",  .flags=IGNORE},   // intensite souscrite
     {.label="BASE",    .flags=NUMERIQUE},   // index d'energie en tarif de base
     {.label="HCHC",    .flags=NUMERIQUE},   // index d'energie
     {.label="HCHP",    .flags=NUMERIQUE},   // index d'energie
-    {.label="PTEC",    .flags=TEXTE},       // intensite apparente instantanée
+    {.label="PTEC",    .flags=IGNORE},       // intensite apparente instantanée
     {.label="IINST",   .flags=NUMERIQUE},   // intensite apparente instantanée
-    {.label="IMAX",    .flags=NUMERIQUE},   // intensité max
+    {.label="IMAX",    .flags=IGNORE},   // intensité max
     {.label="PAPP",    .flags=NUMERIQUE},   // puissance apparente instantanée
-    {.label="MOTDETAT",.flags=TEXTE}
+    {.label="MOTDETAT",.flags=IGNORE}
 };
 
 #define TIC_DATA_STANDARD_COUNT   (sizeof(TIC_DATA_STANDARD) / sizeof(TIC_DATA_STANDARD[0]))
