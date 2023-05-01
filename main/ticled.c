@@ -3,65 +3,62 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
-//#include "freertos/stream_buffer.h"
 #include "driver/gpio.h"
-//#include "mqtt_client.h"
 
 #include "esp_log.h"
 #include "pinout.h"
 #include "ticled.h"
+#include "status.h"
 
 static const char *TAG = "ticled.c";
 
-// Contrôle de la led du PtiInfo avec un EventGroup
-EventGroupHandle_t s_to_ticled = NULL;
-#define TIC_BIT_COURT    ( 1 << 0 )
-#define TIC_BIT_LONG     ( 1 << 1 )
+// Durée des clingotements
+#define BLINK_COURT_ON    250         // ms
+#define BLINK_COURT_OFF   100         // ms
+#define BLINK_LONG_ON     2000        // ms
+#define BLINK_LONG_OFF    1000        // ms
 
-/*
-typedef struct led_task_params_s {
-    EventGroupHandle_t blink_events;
-} led_task_params_t;
-*/
+// Contrôle de la led du PtiInfo avec un EventGroup
+EventGroupHandle_t s_ticled_events = NULL;
+#define BIT_BLINK_COURT    ( 1 << 0 )
+#define BIT_BLINK_LONG     ( 1 << 1 )
 
 
 static void ticled_blink( const EventBits_t bits ) 
 {
-    if( s_to_ticled == NULL )
+    if( s_ticled_events == NULL )
     {
-        ESP_LOGD( TAG, "s_to_ticled pas initialisé" );
+        ESP_LOGD( TAG, "s_ticled_events pas initialisé" );
         return;
     }
-    xEventGroupSetBits( s_to_ticled, bits );
+    xEventGroupSetBits( s_ticled_events, bits );
 }
 
-void ticled_blink_short( ) 
-{
-    ticled_blink( TIC_BIT_COURT );
-}
 
-void ticled_blink_long( ) 
+static void status_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data )
 {
-    ticled_blink( TIC_BIT_LONG );
+    assert (event_base == STATUS_EVENTS);
+    switch (event_id)
+    {
+        case STATUS_EVENT_BAUDRATE:    // Donnees reçues par l'UART
+            ticled_blink( BIT_BLINK_COURT );
+            break;
+        case STATUS_EVENT_TIC_MODE:    // Trame complète decodée correctement
+            ticled_blink( BIT_BLINK_LONG );
+            break;
+        // default:
+            // ignore autres evènements
+    }
 }
 
 
 static void ticled_task( void *pvParams )
 {
-    // led_task_params_t *params = (led_task_params_t *)pvParams;
-    
-    gpio_set_direction( TIC_GPIO_LED, GPIO_MODE_OUTPUT );
-    gpio_set_level( TIC_GPIO_LED, 0 );
-
     for(;;)
     {
-        EventBits_t uxBits;
-
-        // Wait a maximum of 100ms for either bit 0 or bit 4 to be set within
-        // the event group.  Clear the bits before exiting.
-        uxBits = xEventGroupWaitBits(
-                    s_to_ticled,        // The event group being tested.
-                    TIC_BIT_COURT | TIC_BIT_LONG,              // The bits within the event group to wait for.
+        EventBits_t uxBits = xEventGroupWaitBits(
+                    s_ticled_events,
+                    (BIT_BLINK_COURT | BIT_BLINK_LONG),              // The bits within the event group to wait for.
                     pdTRUE,         // BITs should be cleared before returning.
                     pdFALSE,        // Don't wait for both bits, either bit will do.
                     portMAX_DELAY ); // Wait a max
@@ -69,41 +66,62 @@ static void ticled_task( void *pvParams )
         //  allume la led
         gpio_set_level( TIC_GPIO_LED, 1 );
 
-        // laisse ON pendant une durée supérieure à 1 trame ( prioritaire sur BLINK_COURT )
-        if( ( uxBits & TIC_BIT_LONG ) != 0 )
+        // clignote long ou court
+        if( ( uxBits & BIT_BLINK_LONG) != 0 )
         {
             ESP_LOGD( TAG, "long blink" );
-            vTaskDelay( TIC_BLINK_LONG / portTICK_PERIOD_MS );
+            vTaskDelay( BLINK_LONG_ON / portTICK_PERIOD_MS );
+            gpio_set_level( TIC_GPIO_LED, 0 );
+            vTaskDelay( BLINK_LONG_OFF/ portTICK_PERIOD_MS );
         }
-        else if( ( uxBits & TIC_BIT_COURT ) != 0 )
+        else if( ( uxBits & BIT_BLINK_COURT ) != 0 )
         {
             ESP_LOGD( TAG, "short blink" );
-            vTaskDelay( TIC_BLINK_COURT / portTICK_PERIOD_MS );
+            vTaskDelay( BLINK_COURT_ON / portTICK_PERIOD_MS );
+            gpio_set_level( TIC_GPIO_LED, 0 );
+            vTaskDelay( BLINK_COURT_OFF/ portTICK_PERIOD_MS );
         }
-
-        //  Etient la led
-        gpio_set_level( TIC_GPIO_LED, 0 );
     }
 }
 
-BaseType_t ticled_task_start()
+tic_error_t ticled_task_start()
 {
-    s_to_ticled = xEventGroupCreate();
-    if( s_to_ticled == NULL )
+    s_ticled_events = xEventGroupCreate();
+    if( s_ticled_events == NULL )
     {
         ESP_LOGE( TAG, "xCreateQueue() failed" );
-        return pdFALSE;
+        return TIC_ERR_APP_INIT;
     }
 
-    //led_task_params_t *params = malloc( sizeof(led_task_params_t) );
-    //if( params ==NULL )
-    ///{
-    //    ESP_LOGE( TAG, "Malloc failed" );
-    //    return;
-    //}
-    // params->blink_events = blink_events;
+    // init GPIO
+    esp_err_t esp_err;
+    esp_err = gpio_set_direction( TIC_GPIO_LED, GPIO_MODE_OUTPUT );
+    if (esp_err != ESP_OK)
+    {
+        ESP_LOGE( TAG, "gpio_set_direction() erreur %#02x", esp_err);
+        return TIC_ERR_APP_INIT;
+    }
+    esp_err = gpio_set_level( TIC_GPIO_LED, 0 );
+    if (esp_err != ESP_OK)
+    {
+        ESP_LOGE( TAG, "gpio_set_levet() erreur %#02x", esp_err);
+        return TIC_ERR_APP_INIT;
+    }
 
-    return xTaskCreate(ticled_task, "ticled", 4096, NULL, 1, NULL);
+    // enregistre un handler pour reecevoir les notifications BAUDRATE et TIC_MODE
+    tic_error_t err;
+    err = status_register_event_handler (status_event_handler, ESP_EVENT_ANY_ID );
+    if (err != TIC_OK)
+    {
+        ESP_LOGE( TAG, "status_register_event_handler()) erreur %#02x", err);
+        return TIC_ERR_APP_INIT;
+    }
 
+    if( xTaskCreate(ticled_task, "ticled", 4096, NULL, 1, NULL) != pdPASS )
+    {
+        ESP_LOGE (TAG, "xTaskCreate() failed");
+        return TIC_ERR_APP_INIT;
+    }
+    return TIC_OK;
 }
 

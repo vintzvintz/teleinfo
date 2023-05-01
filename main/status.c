@@ -204,27 +204,15 @@ void event_baudrate (int baudrate)
     ESP_LOGD( TAG, "STATUS_EVENT_BAUDRATE baudrate=%d", baudrate);
 
     //*********TODO***********
-    //   creer un handler dans TICLED
-    ticled_blink_short();
-
-    //*********TODO***********
     // creer un handler dans OLED
     s_tic.baudrate = baudrate;
     update_oled_ticmode();
 
-    //*********TODO***********
-    // remplacer par une API directe entre uart.c et decode.c
-    // ou par un event handler dans decode.c
-    //decode_set_mode(mode);
 }
 
 void event_tic_mode (tic_mode_t mode )
 {
     ESP_LOGD( TAG, "STATUS_EVENT_TIC_MODE mode=%#02x", mode);
-
-    //*********TODO***********
-    //   creer un handler dans TICLED
-    ticled_blink_long();
 
     //*********TODO***********
     // creer un handler dans OLED
@@ -268,7 +256,7 @@ static void event_mqtt( const char* status )
 
 
 // custom status event loop
-void status_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data )
+static void status_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data )
 {
     assert ( event_base==STATUS_EVENTS);
     switch( event_id )
