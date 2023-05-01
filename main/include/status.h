@@ -1,30 +1,6 @@
 #pragma once
 
-#include "esp_netif.h"
-#include "errors.h"
-
-#define STATUS_BAUDRATE_DEFAULT_TIMEOUT   500     // ms
-#define STATUS_TICMODE_DEFAUT_TIMEOUT     2000    // ms
-
-typedef enum {
-    TIC_MODE_INCONNU = 0,
-    TIC_MODE_HISTORIQUE,
-    TIC_MODE_STANDARD,
-} tic_mode_t;
-
-
-ESP_EVENT_DECLARE_BASE(STATUS_EVENTS);         // declaration of the task events family
-
-enum {
-    STATUS_EVENT_NONE = 0,
-    STATUS_EVENT_BAUDRATE,
-    STATUS_EVENT_TIC_MODE,
-    STATUS_EVENT_CLOCK_TICK,
-    STATUS_EVENT_PUISSANCE,
-    STATUS_EVENT_WIFI,
-    STATUS_EVENT_MQTT,
-};
-
+#include "tic_types.h"
 
 // initialise les timers d'état des liaisons
 tic_error_t status_init();

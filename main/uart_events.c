@@ -9,11 +9,11 @@
 #include "esp_log.h"
 
 
-#include "errors.h"
-#include "pinout.h"
+#include "tic_types.h"
+#include "tic_config.h"     // uart rx pin
 #include "uart_events.h"
-#include "decode.h"
-#include "status.h"
+#include "decode.h"         // pour decode_incming_bytes()
+#include "status.h"         // pour status_update_baudrate()
 
 
 static const char *TAG = "uart_events.c";

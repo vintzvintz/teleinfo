@@ -6,12 +6,11 @@
 #include "esp_log.h"
 
 
-#include "errors.h"
+#include "tic_types.h"
 #include "dataset.h"
 #include "decode.h"
 #include "process.h"
 #include "status.h"
-#include "ticled.h"
 
 static const char *TAG = "decode.c";
 
@@ -208,7 +207,7 @@ static tic_error_t decode_dataset_end( tic_decoder_t *td ) {
     
     // ajoute les flags
     tic_dataset_flags_t flags;
-    if( dataset_flags_definition( ds->etiquette, &flags) == TIC_OK )
+    if( dataset_flags_definition( ds->etiquette, td->mode, &flags) == TIC_OK )
     {
         ds->flags = flags;
     }

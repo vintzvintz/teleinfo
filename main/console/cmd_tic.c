@@ -12,12 +12,11 @@
 #include "esp_err.h"
 #include "nvs.h"
 
-
-#include "errors.h"
+#include "tic_config.h"
 #include "tic_console.h"
 #include "nvs_utils.h"
-#include "wifi.h"
-#include "mqtt.h"
+#include "wifi.h"       // pour forcer une reconnexion wifi
+#include "mqtt.h"       // pour forcer une reconnexion mqtt
 
 
 static const char *TAG = "cmd_tic.c";

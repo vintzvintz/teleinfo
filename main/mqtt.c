@@ -14,12 +14,11 @@
 #include "esp_tls.h"
 #include "mqtt_client.h"
 
-#include "errors.h"
-#include "process.h"
+#include "tic_types.h"
+#include "tic_config.h"
 #include "status.h"
 #include "mqtt.h"
 #include "nvs_utils.h"
-#include "tic_console.h"
 
 static const char *TAG = "mqtt.c";
 

@@ -5,13 +5,10 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 
-#include "errors.h"
-#include "dataset.h"
+#include "tic_types.h"
 
 
 static const char *TAG = "dataset.c";
-
-//static int32_t s_allocated_datasets = 0;
 
 #define TEXTE (TIC_DS_PUBLISHED)
 #define NUMERIQUE (TIC_DS_PUBLISHED|TIC_DS_NUMERIQUE)
@@ -20,7 +17,7 @@ static const char *TAG = "dataset.c";
 #define IGNORE 0
 
 
-static const flags_definition_t TIC_DATA_DEFINITION[] = {
+static const flags_definition_t TIC_DATA_STANDARD[] = {
     {.label="ADSC",    .flags=TEXTE},              // numero de serie du compteur
     {.label="EAST",    .flags=NUMERIQUE},          // energie active soutirée
     {.label="IRMS1",   .flags=NUMERIQUE},          // intensite instantanée
@@ -63,20 +60,66 @@ static const flags_definition_t TIC_DATA_DEFINITION[] = {
     {.label="VTIC",    .flags=IGNORE},      // version de la TIC
 };
 
-#define DEF_CNT (sizeof(TIC_DATA_DEFINITION) / sizeof(TIC_DATA_DEFINITION[0]))
+static const flags_definition_t TIC_DATA_HISTORIQUE[] = {    
+    {.label="ADCO",    .flags=TEXTE},       // numero de serie du compteur
+    {.label="OPTARIF", .flags=TEXTE},       // energie active soutirée
+    {.label="ISOUSC",  .flags=NUMERIQUE},   // intensite souscrite
+    {.label="BASE",    .flags=NUMERIQUE},   // index d'energie en tarif de base
+    {.label="HCHC",    .flags=NUMERIQUE},   // index d'energie
+    {.label="HCHP",    .flags=NUMERIQUE},   // index d'energie
+    {.label="PTEC",    .flags=TEXTE},       // intensite apparente instantanée
+    {.label="IINST",   .flags=NUMERIQUE},   // intensite apparente instantanée
+    {.label="IMAX",    .flags=NUMERIQUE},   // intensité max
+    {.label="PAPP",    .flags=NUMERIQUE},   // puissance apparente instantanée
+    {.label="MOTDETAT",.flags=TEXTE}
+};
 
-tic_error_t dataset_flags_definition( const tic_char_t *etiquette, tic_dataset_flags_t *flags )
+#define TIC_DATA_STANDARD_COUNT   (sizeof(TIC_DATA_STANDARD) / sizeof(TIC_DATA_STANDARD[0]))
+#define TIC_DATA_HISTORIQUE_COUNT (sizeof(TIC_DATA_HISTORIQUE) / sizeof(TIC_DATA_HISTORIQUE[0]))
+
+
+static tic_error_t flags_lookup ( const tic_char_t *etiquette, 
+                                  const flags_definition_t *defs,
+                                  size_t defs_len, 
+                                  tic_dataset_flags_t *out_flags )
 {
-    for( size_t i=0; i< DEF_CNT; i++ )
+    assert(out_flags);
+    for( size_t i=0; i< defs_len; i++ )
     {
-        if( strncmp( TIC_DATA_DEFINITION[i].label, etiquette, TIC_SIZE_ETIQUETTE ) == 0 )
+        if( strncmp( defs[i].label, etiquette, TIC_SIZE_ETIQUETTE ) == 0 )
         {
-            *flags = TIC_DATA_DEFINITION[i].flags;
+            *out_flags = defs[i].flags;
             return TIC_OK;
         }
     }
     return TIC_ERR_UNKNOWN_DATA;
 }
+
+/// @brief renvoie les attributs texte/numerique et avec/sans horodate pour une donnée TIC
+/// @param etiquette nom de la donnée
+/// @param mode utiliser la table standard ou historique ( ou 0 pour chercher dans toutes les tables)
+/// @param out_flags resultat
+/// @return TIC_OK si l'etiquette est trouvée, TIC_ERR_UNKNOWN_DATA sinon
+tic_error_t dataset_flags_definition ( const tic_char_t *etiquette, tic_mode_t mode, tic_dataset_flags_t *out_flags)
+{
+    if ((!mode) || (mode == TIC_MODE_HISTORIQUE))
+    {
+        if( flags_lookup (etiquette, TIC_DATA_HISTORIQUE, TIC_DATA_HISTORIQUE_COUNT, out_flags) == TIC_OK )
+        {
+            return TIC_OK;
+        }
+    }
+
+    if( (!mode) || (mode == TIC_MODE_STANDARD))
+    {
+        if (flags_lookup (etiquette, TIC_DATA_STANDARD, TIC_DATA_STANDARD_COUNT, out_flags) == TIC_OK)
+        {
+            return TIC_OK;
+        }
+    }
+    return TIC_ERR_UNKNOWN_DATA;
+}
+
 
 uint32_t dataset_count( dataset_t *dataset )
 {

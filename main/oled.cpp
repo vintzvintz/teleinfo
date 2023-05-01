@@ -11,10 +11,9 @@
 #include "lcdgfx.h"
 #include "lcdgfx_gui.h"
 
+#include "tic_types.h"
+#include "tic_config.h"
 #include "oled.h"
-#include "pinout.h"
-
-#include "decode.h"
 
 
 #if CONFIG_FREERTOS_UNICORE

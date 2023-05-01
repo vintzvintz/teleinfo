@@ -1,6 +1,6 @@
 
 #include "nvs.h"
-#include "errors.h"
+#include "tic_types.h"
 
 nvs_type_t str_to_nvstype(const char *type);
 const char *nvstype_to_str(nvs_type_t type);

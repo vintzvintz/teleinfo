@@ -16,6 +16,7 @@
 #include "esp_sntp.h"
 
 #include "clock.h"
+#include "tic_config.h"    // pour l'adresse du serveur SNTP
 #include "status.h"
 
 static const char *TAG = "clock.c";

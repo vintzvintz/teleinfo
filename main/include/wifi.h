@@ -1,9 +1,7 @@
 
 
-#define WIFI_RECONNECT_LOOP_DELAY   10000      // ms
+#include "tic_types.h"
 
-void wifi_task_start();
-void wifi_reconnect();
-
-
+tic_error_t wifi_task_start();
+tic_error_t wifi_reconnect();
 tic_error_t wifi_scan_start(int timeout_sec);

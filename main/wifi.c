@@ -11,8 +11,9 @@
 #include "lwip/err.h"
 #include "lwip/sys.h"
 
-#include "errors.h"
-#include "status.h"
+#include "tic_types.h"
+#include "tic_config.h"     // NVS entries names for wifi credentials
+#include "status.h"         // pour notifier l'etat de la connexion wifi
 #include "wifi.h"
 #include "nvs_utils.h"
 #include "tic_console.h"
@@ -97,13 +98,16 @@ static tic_error_t set_wifi_config()
     return TIC_OK;
 }
 
-void wifi_reconnect()
+tic_error_t wifi_reconnect()
 {
+    tic_error_t err = TIC_OK;
     ESP_LOGI (TAG, "wifi_reconnect()");
-    esp_wifi_disconnect ();
-    set_wifi_config ();
-    status_update_wifi ("");
+    esp_wifi_disconnect ();    // ignore errors
+    err = set_wifi_config ();
+
+    status_update_wifi ("");  // ignore errors
     xEventGroupSetBits (s_wifi_events, BIT_TRY_RECONNECT );
+    return err;
 }
 
 static void print_scan_results()
@@ -315,7 +319,7 @@ static void wifi_loop( void * pvParams )
 }
 
 
-void wifi_task_start( )
+tic_error_t wifi_task_start( )
 {
     esp_log_level_set(TAG, ESP_LOG_DEBUG);
 
@@ -324,14 +328,19 @@ void wifi_task_start( )
     if( s_wifi_events == NULL )
     {
         ESP_LOGE( TAG, "Could not create wifi event group" );
-        return;
+        return TIC_ERR_APP_INIT;
     }
 
     if( wifi_initialise() != TIC_OK )
     {
         ESP_LOGE( TAG, "erreur wifi_initialise()" );
-        return;
+        return TIC_ERR_APP_INIT;
     }
 
-    xTaskCreate( wifi_loop, "wifi_task", 4096, NULL, 10, NULL );
+    if( xTaskCreate( wifi_loop, "wifi_task", 4096, NULL, 10, NULL ) != pdPASS )
+    {
+        ESP_LOGE (TAG, "xTaskCreate() failed");
+        return TIC_ERR_APP_INIT;
+    }
+    return TIC_OK;
 }

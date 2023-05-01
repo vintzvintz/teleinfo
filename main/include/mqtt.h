@@ -1,17 +1,7 @@
 
-#include "freertos/FreeRTOS.h"
-#include "errors.h"
-
-#define MQTT_TOPIC_FORMAT "home/elec/%s"
-
-#define MQTT_TOPIC_BUFFER_SIZE 128
-#define MQTT_PAYLOAD_BUFFER_SIZE 1500
 
 
-typedef struct mqtt_msg_s {
-    char *payload;
-    char *topic;
-} mqtt_msg_t;
+#include "tic_types.h"
 
 
 // Alloue un message mqtt

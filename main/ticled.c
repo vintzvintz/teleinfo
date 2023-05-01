@@ -4,11 +4,14 @@
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
-
 #include "esp_log.h"
-#include "pinout.h"
+#include "esp_event.h"
+
+
+#include "tic_types.h"
+#include "tic_config.h"     // led GPIO pin
+#include "status.h"          // pour status_register_event_handler()
 #include "ticled.h"
-#include "status.h"
 
 static const char *TAG = "ticled.c";
 

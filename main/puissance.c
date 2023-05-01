@@ -5,7 +5,7 @@
 
 #include "esp_log.h"
 
-#include "errors.h"
+#include "tic_types.h"
 #include "dataset.h"
 #include "puissance.h"
 

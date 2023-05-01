@@ -12,7 +12,11 @@
 #include "esp_log.h"
 #include "esp_wifi.h"
 
+#include "tic_types.h"
+#include "tic_config.h"
 #include "status.h"
+
+// TODO dépendances à supprimer
 #include "oled.h"
 #include "ticled.h"
 

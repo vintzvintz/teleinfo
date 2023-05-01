@@ -11,11 +11,11 @@
 
 #include "esp_log.h"
 
-#include "errors.h"
-#include "decode.h"
+#include "tic_types.h"
+#include "tic_config.h"
 #include "dataset.h"
-#include "status.h"
-#include "mqtt.h"
+#include "status.h"      // pour status_update_puissance()
+#include "mqtt.h"        // pour mqtt_msg_alloc() mqtt_msg_free()
 #include "process.h"
 #include "puissance.h"
 
@@ -301,7 +301,7 @@ tic_error_t process_receive_datasets( dataset_t *ds )
 }
 
 
-BaseType_t process_task_start( QueueHandle_t to_decoder, QueueHandle_t to_mqtt )
+tic_error_t process_task_start( QueueHandle_t to_decoder, QueueHandle_t to_mqtt )
 {
     esp_log_level_set( TAG, ESP_LOG_DEBUG );
     esp_log_level_set( "puissance.c", ESP_LOG_DEBUG );
@@ -313,7 +313,7 @@ BaseType_t process_task_start( QueueHandle_t to_decoder, QueueHandle_t to_mqtt )
     if( s_to_process==NULL )
     {
         ESP_LOGE( TAG, "xCreateQueue() failed" );
-        return pdFALSE;
+        return TIC_ERR_APP_INIT;
     }
 
     // create mqtt client task
@@ -321,6 +321,7 @@ BaseType_t process_task_start( QueueHandle_t to_decoder, QueueHandle_t to_mqtt )
     if( task_created != pdPASS )
     {
         ESP_LOGE( TAG, "xTaskCreate() failed");
+        return TIC_ERR_APP_INIT;
     }
-    return task_created;
+    return TIC_OK;
 }

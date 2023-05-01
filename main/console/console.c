@@ -207,10 +207,15 @@ static void console_task(void *pvParams)
 
 
 
-BaseType_t console_task_start()
+tic_error_t console_task_start()
 {
     esp_log_level_set( TAG, ESP_LOG_INFO );
     ESP_LOGD( TAG, "console_task_start()" );
 
-    return xTaskCreate( console_task, "console_task", 4096, NULL, 2, NULL );
+    if ( xTaskCreate( console_task, "console_task", 4096, NULL, 2, NULL ) != pdPASS )
+    {
+        ESP_LOGE (TAG, "xTaskCreate() failed");
+        return TIC_ERR_APP_INIT;
+    }
+    return TIC_OK;
 }

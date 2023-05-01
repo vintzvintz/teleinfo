@@ -7,6 +7,8 @@
 #include "nvs_flash.h"
 #include "esp_log.h"
 
+#include "tic_types.h"
+
 #include "uart_events.h"
 #include "decode.h"
 #include "process.h"

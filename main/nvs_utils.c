@@ -7,7 +7,8 @@
 #include "esp_err.h"
 #include "nvs.h"
 
-#include "errors.h"
+#include "tic_types.h"
+#include "tic_config.h"
 #include "tic_console.h"
 
 static const char *TIC_NVS_NAMESPACE = "tic";

@@ -9,8 +9,12 @@
 #include "driver/gpio.h"
 #include "esp_intr_alloc.h"
 
-#include "pinout.h"
+#include "tic_config.h"
 #include "bouton.h"
+
+
+#define GPIO_WIFI_PROVIVISIONING_PIN   GPIO_NUM_9
+
 
 #define GPIO_WIFI_MASK ( 1ULL<< GPIO_WIFI_PROVIVISIONING_PIN )
 
