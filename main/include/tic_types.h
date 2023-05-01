@@ -28,6 +28,17 @@ typedef struct flagdef_s {
 #define TIC_DS_NUMERIQUE       (1 << 2)
 
 
+typedef char id_compteur_t[16];      // 12 caractères d'après la spec enedis
+
+typedef struct {
+ //   tic_mode_t mode;                 // mode TIC déduit des labels présents
+    id_compteur_t id_compteur;
+    int32_t index_energie;          // 9 car. valeur max 999 999 999 Wh -> int32 ok
+    int32_t puissance_app;          // 5 car. valeur max 99 999 VA
+    time_t horodate;
+ } tic_data_t;
+
+
 //tic_dataset_t est une liste de données décodées = contenu d'une trame complete
 typedef struct dataset_s {
     tic_char_t etiquette[TIC_SIZE_ETIQUETTE];

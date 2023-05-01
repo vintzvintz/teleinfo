@@ -13,9 +13,6 @@ static const char *TAG = "puissance.c";
 
 #define TIC_LAST_POINTS_CNT  10
 
-static const char *LABEL_ENERGIE_ACTIVE_TOTALE = "EAST";
-static const char *LABEL_HORODATE = "DATE";
-
 static const char *LABEL_PACT_PREFIX = "PACT";
 
 
@@ -120,174 +117,20 @@ dataset_t * puissance_get_all()
 }
 
 
-#define TSFRAGMENT_BUFSIZE 8
-static tic_error_t tsfragment_to_int( const char *start, int read_len, int *val, int offset )
+tic_error_t puissance_incoming_data( const tic_data_t *data )
 {
-    char buf[TSFRAGMENT_BUFSIZE];
-    if( read_len >= TSFRAGMENT_BUFSIZE-1 )
-    {
-        ESP_LOGE( TAG, "overflow in tsfragment_to_int()" );
-        return TIC_ERR_OVERFLOW;
-    }
-
-    strncpy( buf, start, read_len );
-    buf[read_len]= '\0';
-
-    char *end;
-    *val = strtol( buf, &end, 10);
-    if( end-buf != read_len)
-    {
-        ESP_LOGE( TAG, "erreur strtol() sur %s", buf);
-        return TIC_ERR_BAD_DATA;
-    }
-    *val += offset;
-    return TIC_OK;
-}
-
-
-static tic_error_t horodate_to_time_t( const char *horodate, time_t *unix_time)
-{
-    //ESP_LOGD( TAG, "horodate_to_time_t(%s)", horodate  );
-/*
-    struct tm tm1 = { .tm_year=123, 
-                     .tm_mon=4,
-                     .tm_mday=8,
-                     .tm_hour=12,
-                     .tm_min=2,
-                     .tm_sec=8, 
-                     .tm_isdst=-1 };
-    time_t t = mktime( &tm1 );
-    ESP_LOGD( TAG, "time_t t = %"PRIi64, t);
-    struct tm timeinfo;
-    localtime_r( &t, &timeinfo );
-    strftime( timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S", &timeinfo );
-    ESP_LOGI( TAG, "local time %s", timebuf );
-*/
-    struct tm tm;
-
-    // utilise l'indication d'heure d'été reçue
-    switch( horodate[0] )      
-    {
-        case 'E':
-            tm.tm_isdst = 1;     // E = heure d'été
-            break;
-        case 'H':
-            tm.tm_isdst = 0;     // H = heure d'hiver
-            break;
-        default:
-            tm.tm_isdst = -1;
-    }
-
-    tic_error_t err= TIC_OK;
-
-    //   tm_year commence en 1900, la teleinfo commence en 2000
-    err = tsfragment_to_int( &(horodate[1]), 2, &tm.tm_year, 100 );
-    if( err != TIC_OK ) { return err; }
-
-    //   tm_mon 0->11   teleinfo = 1->12
-    err = tsfragment_to_int( &(horodate[3]), 2, &(tm.tm_mon), -1 );
-    if( err != TIC_OK ) { return err; }
-
-    err = tsfragment_to_int( &(horodate[5]), 2, &(tm.tm_mday), 0 );
-    if( err != TIC_OK ) { return err; }
-
-    err = tsfragment_to_int( &(horodate[7]), 2, &(tm.tm_hour), 0 );
-    if( err != TIC_OK ) { return err; }
-
-    err = tsfragment_to_int( &(horodate[9]), 2, &(tm.tm_min), 0 );
-    if( err != TIC_OK ) { return err; }
-
-    err = tsfragment_to_int( &(horodate[11]), 2, &(tm.tm_sec), 0 );
-    if( err != TIC_OK ) { return err; }
-
-    // pour le debug
-    char timebuf[60];
-    strftime( timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S", &tm );
-    //ESP_LOGD( TAG, "horodate decodéee %s", timebuf );
-
-    // renvoie le timestamp unix sur le pointeur fourni
-    if( unix_time != NULL )
-    {
-        *unix_time = mktime( &tm );
-    }
-    return TIC_OK;
-}
-
-
-// construit un east_point_t à partir d'un dataset
-static tic_error_t ds_to_point( east_point_t *pt, const dataset_t *ds )
-{
-    if( pt == NULL ) 
-    {
-        return TIC_ERR_MISSING_DATA;
-    }
-
-    pt->ts = 0;
-    pt->east = 0;
-
-    // cherche la valeur de l'index et l'horodate dans le dataset
-    const dataset_t *ds_horodate = dataset_find( ds, LABEL_HORODATE );
-    if( ds_horodate == NULL )
-    {
-        ESP_LOGE( TAG, "Donnee DATE manquante");
-        return TIC_ERR_MISSING_DATA;
-    }
- 
-    const dataset_t *ds_east_index = dataset_find( ds, LABEL_ENERGIE_ACTIVE_TOTALE );
-    if( ds_east_index == NULL )
-    {
-        ESP_LOGE( TAG, "Donnee EAST manquante");
-        return TIC_ERR_MISSING_DATA;
-    }
-
-    //ESP_LOGD( TAG, "ds_to_point() : horodate=%s index=%s", ds_horodate->horodate, ds_east_index->valeur );
-    
-    // traite l'horodate
-    time_t ts;
-    tic_error_t err = horodate_to_time_t( ds_horodate->horodate, &ts );
-    if( err != TIC_OK )
-    {
-        return err;
-    }
-
-    // traite l'index
-    char *end;
-    int val = strtol( ds_east_index->valeur, &end, 10);
-    if( *end != '\0')
-    {
-        ESP_LOGE( TAG, "erreur strtol() sur l'index EAST '%s'", ds_east_index->valeur );
-        return TIC_ERR_BAD_DATA;
-    }
-
-    pt->ts = ts;
-    pt->east = val;
-    ESP_LOGD( TAG, "ds_to_point() : ts=%"PRIi64" east=%"PRIi32, pt->ts, pt->east );
-    return TIC_OK;
-}
-
-
-tic_error_t puissance_new_trame( const dataset_t *ds )
-{
-    east_point_t pt = {0};
-
-    // extrait l'index et l'horodate de la trame reçue
-    tic_error_t err = ds_to_point(&pt, ds);
-    if( err != TIC_OK  )
-    {
-        ESP_LOGW( TAG, "Trame ignorée - valeurs incorrectes");
-        return err;
-    }
+    east_point_t pt = {
+        .ts = data->horodate,
+        .east = data->index_energie
+    };
 
     // compare avec le dernier point reçu 
     const east_point_t *prev = get_east_point( 0 );
-    if( prev!=NULL && prev->east==pt.east )
+    if( prev->east != pt.east )
     {
-        //ESP_LOGD( TAG, "trame ignorée - index EAST inchangé %"PRIi32, pt.east );
-        return TIC_OK;
+        add_east_point( &pt );  // ne renvoie jamais d'erreur
+        ESP_LOGD( TAG, "nouvel index energie reçu %"PRIi32, pt.east );
     }
-
-    add_east_point( &pt );  // ne renvoie jamais d'erreur
-    ESP_LOGD( TAG, "trame ajoutée EAST=%"PRIi32, pt.east );
     return TIC_OK;
 }
 

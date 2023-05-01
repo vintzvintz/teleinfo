@@ -1,12 +1,13 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
 
 #include "tic_types.h"
-
+#include "dataset.h"
 
 static const char *TAG = "dataset.c";
 
@@ -15,6 +16,20 @@ static const char *TAG = "dataset.c";
 #define TEXTE_TS (TEXTE|TIC_DS_HAS_TIMESTAMP)
 #define NUMERIQUE_TS (NUMERIQUE|TIC_DS_HAS_TIMESTAMP)
 #define IGNORE 0
+
+
+//  noms différents entre standard et historique
+static const char *LABEL_ADCO   = "ADCO";
+static const char *LABEL_ADSC   = "ADSC";
+static const char *MISSING_ID = "_missing_id_";  // valeur par défaut si ADCO ou ADSC sont absents
+
+static const char *LABEL_BASE   = "BASE";
+static const char *LABEL_EAST   = "EAST";
+
+static const char *LABEL_PAPP   = "PAPP";
+static const char *LABEL_SINSTS = "SINSTS";
+
+static const char *LABEL_DATE   = "DATE";   // en mode standard uniquement
 
 
 static const flags_definition_t TIC_DATA_STANDARD[] = {
@@ -76,6 +91,168 @@ static const flags_definition_t TIC_DATA_HISTORIQUE[] = {
 
 #define TIC_DATA_STANDARD_COUNT   (sizeof(TIC_DATA_STANDARD) / sizeof(TIC_DATA_STANDARD[0]))
 #define TIC_DATA_HISTORIQUE_COUNT (sizeof(TIC_DATA_HISTORIQUE) / sizeof(TIC_DATA_HISTORIQUE[0]))
+
+
+#define TSFRAGMENT_BUFSIZE 8
+static tic_error_t tsfragment_to_int( const char *start, int read_len, int *val, int offset )
+{
+    char buf[TSFRAGMENT_BUFSIZE];
+    if( read_len >= TSFRAGMENT_BUFSIZE-1 )
+    {
+        ESP_LOGE( TAG, "overflow in tsfragment_to_int()" );
+        return TIC_ERR_OVERFLOW;
+    }
+
+    strncpy( buf, start, read_len );
+    buf[read_len]= '\0';
+
+    char *end;
+    *val = strtol( buf, &end, 10);
+    if( end-buf != read_len)
+    {
+        ESP_LOGE( TAG, "erreur strtol() sur %s", buf);
+        return TIC_ERR_BAD_DATA;
+    }
+    *val += offset;
+    return TIC_OK;
+}
+
+static tic_error_t horodate_to_time_t( const char *horodate, time_t *unix_time)
+{
+    //ESP_LOGD( TAG, "horodate_to_time_t(%s)", horodate  );
+
+    struct tm tm;
+
+    // utilise l'indication d'heure d'été reçue
+    switch( horodate[0] )      
+    {
+        case 'E':
+            tm.tm_isdst = 1;     // E = heure d'été
+            break;
+        case 'H':
+            tm.tm_isdst = 0;     // H = heure d'hiver
+            break;
+        default:
+            tm.tm_isdst = -1;
+    }
+
+    tic_error_t err= TIC_OK;
+
+    //   tm_year commence en 1900, la teleinfo commence en 2000
+    err = tsfragment_to_int( &(horodate[1]), 2, &tm.tm_year, 100 );
+    if( err != TIC_OK ) { return err; }
+
+    //   tm_mon 0->11   teleinfo = 1->12
+    err = tsfragment_to_int( &(horodate[3]), 2, &(tm.tm_mon), -1 );
+    if( err != TIC_OK ) { return err; }
+
+    err = tsfragment_to_int( &(horodate[5]), 2, &(tm.tm_mday), 0 );
+    if( err != TIC_OK ) { return err; }
+
+    err = tsfragment_to_int( &(horodate[7]), 2, &(tm.tm_hour), 0 );
+    if( err != TIC_OK ) { return err; }
+
+    err = tsfragment_to_int( &(horodate[9]), 2, &(tm.tm_min), 0 );
+    if( err != TIC_OK ) { return err; }
+
+    err = tsfragment_to_int( &(horodate[11]), 2, &(tm.tm_sec), 0 );
+    if( err != TIC_OK ) { return err; }
+
+    // pour le debug
+    char timebuf[60];
+    strftime( timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S", &tm );
+    //ESP_LOGD( TAG, "horodate decodéee %s", timebuf );
+
+    // renvoie le timestamp unix sur le pointeur fourni
+    if( unix_time != NULL )
+    {
+        *unix_time = mktime( &tm );
+    }
+    return TIC_OK;
+}
+
+
+tic_error_t dataset_parse ( const dataset_t *ds, tic_data_t *data )
+{
+    // valeurs par défaut
+    memset( data, 0 ,sizeof(*data) );
+    data->horodate = time(NULL);
+
+    char *strtol_end;
+    tic_error_t err = TIC_OK;
+
+    // identifiant compteur
+    const dataset_t* ds_id = dataset_find_deux( ds, LABEL_ADCO, LABEL_ADSC );
+    if ( ds_id )
+    {
+        strncpy( data->id_compteur, ds_id->valeur, sizeof(data->id_compteur) );
+    }
+    else
+    {
+        ESP_LOGW( TAG, "identifiant compteur absent (ADSC ou ADCO)");
+        strncpy( data->id_compteur, MISSING_ID, sizeof(data->id_compteur) );
+        err = TIC_ERR_MISSING_DATA;
+    }
+
+    // index d'energie active
+    const dataset_t* ds_index = dataset_find_deux( ds, LABEL_BASE, LABEL_EAST );
+    if( ds_index )
+    {
+        int32_t index = strtol( ds_index->valeur, &strtol_end, 10);
+        if( *strtol_end == '\0')
+        {
+            data->index_energie = index;
+        }
+        else
+        {
+            ESP_LOGE( TAG, "erreur strtol() sur valeur EAST ou BASE '%s'", ds_index->valeur );
+            err =TIC_ERR_BAD_DATA;
+        }
+    } 
+    else
+    {
+        ESP_LOGW( TAG, "index d'energie active soutirée absent (BASE ou EAST)" );
+        err = TIC_ERR_MISSING_DATA;
+    }
+
+    // puissance instantanée apparente
+    const dataset_t* ds_papp = dataset_find_deux( ds, LABEL_PAPP, LABEL_SINSTS );
+    if( ds_papp )
+    {
+        int32_t papp = strtol( ds_papp->valeur, &strtol_end, 10);
+        if( *strtol_end == '\0')
+        {
+            data->puissance_app = papp;
+        }
+        else
+        {
+            ESP_LOGE( TAG, "erreur strtol() sur valeur PAPP ou SINSTS '%s'", ds_papp->valeur );
+            err = TIC_ERR_BAD_DATA;
+        }
+    }
+    else
+    {
+        ESP_LOGW( TAG, "puissance instantanée absente (PAPP ou SINSTS)");
+        err = TIC_ERR_MISSING_DATA;
+    }
+
+    // si présente, l'horodate linky remplace l'heure du système
+    const dataset_t *ds_horodate = dataset_find( ds, LABEL_DATE );
+    if ( ds_horodate )
+    {
+        time_t hd;
+        err = horodate_to_time_t( ds_horodate->horodate, &hd);
+        if( err == TIC_OK )
+        {
+            data->horodate = hd;
+        }
+        else
+        {
+            err = TIC_ERR_BAD_DATA;
+        }
+    }
+    return err;
+}
 
 
 static tic_error_t flags_lookup ( const tic_char_t *etiquette, 
@@ -292,3 +469,17 @@ const dataset_t* dataset_find( const dataset_t *ds, const char *etiquette )
     return NULL;
 }
 
+const dataset_t* dataset_find_deux( const dataset_t *ds, const char *label1, const char* label2 )
+{
+    while( ds != NULL )
+    {
+        //ESP_LOGD( TAG, "dataset_find_deux() : ds->etiquette=%s", ds->etiquette);
+        if(   (strncmp( ds->etiquette, label1, TIC_SIZE_ETIQUETTE ) == 0)
+           || (strncmp( ds->etiquette, label2, TIC_SIZE_ETIQUETTE ) == 0) )
+        {
+            return ds;
+        }
+        ds = ds->next;
+    }
+    return NULL;
+}

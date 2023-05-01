@@ -20,6 +20,7 @@ uint32_t dataset_count( dataset_t *dataset );
 
 // recherche un element selon son etiquette
 const dataset_t* dataset_find( const dataset_t *ds, const char *etiquette );
+const dataset_t* dataset_find_deux( const dataset_t *ds, const char *label1, const char* label2 );
 
 // tri selon les étiquettes
 dataset_t * dataset_sort( dataset_t *ds);
@@ -32,3 +33,6 @@ dataset_t * dataset_append( dataset_t *append_to, dataset_t*ds );
 
 // trouve les flags associés à une donnée
 tic_error_t dataset_flags_definition (const tic_char_t *etiquette, tic_mode_t mode, tic_dataset_flags_t *out_flags);
+
+// extrait les données utilisées pour des traitements
+tic_error_t dataset_parse ( const dataset_t *ds, tic_data_t *data );

@@ -25,12 +25,6 @@ static const char *TAG = "process.c";
 
 static QueueHandle_t s_to_process = NULL;
 
-//static const char *LABEL_ADCO = "ADCO";
-static const char *LABEL_DEVICE_ID = "ADSC";
-//static const char *LABEL_PUISSANCE_APPARENTE = "PAPP";
-static const char *LABEL_PUISSANCE_APPARENTE = "SINSTS";
-static const char *LABEL_HORODATE="DATE";
-
 
 static const char *FORMAT_ISO8601 = "%Y-%m-%dT%H:%M:%S%z";
 static const char *FORMAT_NUMERIC_SANS_HORODATE = "  \"%s\":{\"val\":%"PRIi32"}";
@@ -39,46 +33,15 @@ static const char *FORMAT_STRING_SANS_HORODATE = "  \"%s\":{\"val\":\"%s\"}";
 static const char *FORMAT_STRING_AVEC_HORODATE = "  \"%s\":{\"horodate\":\"%s\", \"val\":\"%s\"}";
 
 
-static tic_error_t set_topic (char *buf, size_t size, const dataset_t *ds )
+
+
+static tic_error_t set_topic (char *buf, size_t size, const tic_data_t *data )
 {
-    while( ds != NULL )
-    {
-        if( strcmp( ds->etiquette, LABEL_DEVICE_ID ) == 0 )
-        {
-            snprintf( buf, size, MQTT_TOPIC_FORMAT, ds->valeur );
-            ESP_LOGD( TAG , "Topic=%s", buf );
-            return TIC_OK;
-        }
-        ds = ds->next;
-    }
-    ESP_LOGE( TAG, "Identifiant compteur '%s' absent", LABEL_DEVICE_ID );
-    return TIC_ERR_MISSING_DATA;
-}
-
-
-// envoie, ou non, des donnes pour mettre à jour l'afficheur
-static tic_error_t affiche_papp( const dataset_t *ds )
-{
-    const dataset_t *ds_papp = dataset_find( ds, LABEL_PUISSANCE_APPARENTE );
-    if( ds_papp == NULL  )
-    {
-        ESP_LOGD( TAG, "puissance apparente %s non disponible", LABEL_PUISSANCE_APPARENTE );
-        return TIC_ERR_MISSING_DATA;
-    }
-
-    uint32_t papp = strtol( ds_papp->valeur, NULL, 10 );
-    status_update_puissance (papp);
-
-    const dataset_t *ds_horodate = dataset_find( ds, LABEL_HORODATE );
-    if( ds_horodate == NULL )
-    {
-        ESP_LOGD( TAG, "horodate %s non disponible", LABEL_HORODATE );
-        return TIC_ERR_MISSING_DATA;
-    }
-
-    ESP_LOGI ( TAG, "%s=%s %s=%s", ds_horodate->etiquette, ds_horodate->horodate, ds_papp->etiquette, ds_papp->valeur);
+    assert(data->id_compteur);
+    snprintf ( buf, size, MQTT_TOPIC_FORMAT, data->id_compteur );  // ignore errors
     return TIC_OK;
 }
+
 
 static size_t printf_ds( char *buf, size_t size, const dataset_t *ds )
 {
@@ -201,12 +164,10 @@ static tic_error_t set_payload( char *buf, size_t size, dataset_t *ds )
 }
 
 
-static tic_error_t build_mqtt_msg( mqtt_msg_t *msg, dataset_t *ds  )
+static tic_error_t build_mqtt_msg( mqtt_msg_t *msg, dataset_t *ds, const tic_data_t *data )
 {
-    ESP_LOGD( TAG, "build_mqtt_msg() msg=%p ds=%p", msg, ds);
-
     tic_error_t err;
-    err = set_topic( msg->topic, MQTT_TOPIC_BUFFER_SIZE, ds );
+    err = set_topic( msg->topic, MQTT_TOPIC_BUFFER_SIZE, data );
     if( err != TIC_OK )
     {
         ESP_LOGD( TAG, "Erreur lors de la création du topic MQTT");
@@ -224,6 +185,18 @@ static tic_error_t build_mqtt_msg( mqtt_msg_t *msg, dataset_t *ds  )
 }
 
 
+static tic_error_t traite_donnees( const tic_data_t *data )
+{
+    // mise à jour afficheur oled, etc
+    status_update_puissance (data->puissance_app); // ignore errors
+
+    // envoie la trame au module de calcul de puissance active
+    puissance_incoming_data( data );     // ignore erreurs
+
+    return TIC_OK;
+}
+
+
 static void process_task( void *pvParams )
 {
     ESP_LOGI( TAG, "process_task()");
@@ -231,6 +204,7 @@ static void process_task( void *pvParams )
     mqtt_msg_t *msg = NULL;
     dataset_t *ds = NULL;
     tic_error_t err;
+    tic_data_t data;
 
     for(;;)
     {
@@ -251,11 +225,12 @@ static void process_task( void *pvParams )
         //uint32_t nb=dataset_count(ds);
         //ESP_LOGD( TAG, "%"PRIu32" datasets reçus ds=%p &ds=%p", nb, ds, &ds);
 
-        // mise à jour afficheur oled et logs port serie
-        affiche_papp( ds );                //ignore erreurs
-        
-        // envoie la trame au module de calcul de puissance active
-        puissance_new_trame( ds );
+        // extrait les données utiles et effectue les traitements 
+        err = dataset_parse( ds, &data );
+        if( err == TIC_OK )
+        {
+            traite_donnees( &data ); // ignore erreurs et continue dans tous les cas
+        }
 
         msg = mqtt_msg_alloc();
         if( msg == NULL)
@@ -263,7 +238,7 @@ static void process_task( void *pvParams )
             continue;   // erreur logguee dans mqtt_alloc_msg()
         }
 
-        err = build_mqtt_msg (msg, ds);
+        err = build_mqtt_msg (msg, ds, &data);
         if(err != TIC_OK)
         {
             ESP_LOGE (TAG, "build_mqtt_msg() erreur %d", err);
