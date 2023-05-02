@@ -237,12 +237,12 @@ tic_error_t dataset_parse ( const dataset_t *ds, tic_data_t *data )
     }
 
     // si présente, l'horodate linky remplace l'heure du système
+    // pas d'erreur MISSING_DATA sur l'horodate car non disponible en mode historique
     const dataset_t *ds_horodate = dataset_find( ds, LABEL_DATE );
     if ( ds_horodate )
     {
         time_t hd;
-        err = horodate_to_time_t( ds_horodate->horodate, &hd);
-        if( err == TIC_OK )
+        if( horodate_to_time_t( ds_horodate->horodate, &hd) == TIC_OK )
         {
             data->horodate = hd;
         }

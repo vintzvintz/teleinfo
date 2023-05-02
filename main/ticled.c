@@ -113,7 +113,7 @@ tic_error_t ticled_task_start()
 
     // enregistre un handler pour reecevoir les notifications BAUDRATE et TIC_MODE
     tic_error_t err;
-    err = status_register_event_handler (status_event_handler, ESP_EVENT_ANY_ID );
+    err = status_register_event_handler (ESP_EVENT_ANY_ID, status_event_handler, NULL);
     if (err != TIC_OK)
     {
         ESP_LOGE( TAG, "status_register_event_handler()) erreur %#02x", err);

@@ -5,7 +5,6 @@
 #include "freertos/queue.h"
 #include "esp_log.h"
 
-
 #include "tic_types.h"
 #include "dataset.h"
 #include "decode.h"
@@ -485,16 +484,12 @@ tic_error_t decode_incoming_bytes( tic_char_t *buf , size_t len, tic_mode_t mode
         ESP_LOGE (TAG, "xQueueSend() failed");
         return TIC_ERR_QUEUEFULL;
     }
-
-    //return xStreamBufferSend( s_to_decoder, buf, length, portMAX_DELAY);
     return TIC_OK;
 }
 
 // Create a task to decode teleinfo raw bytestream received from uart
 void tic_decode_task_start( )
 {
-    //esp_log_level_set( TAG, ESP_LOG_DEBUG );
-
     /*
     tic_taskdecode_params_t *tic_task_params = malloc( sizeof(tic_taskdecode_params_t) );
     if( tic_task_params == NULL )

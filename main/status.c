@@ -16,20 +16,8 @@
 #include "tic_config.h"
 #include "status.h"
 
-// TODO dépendances à supprimer
-#include "oled.h"
-#include "ticled.h"
 
 static const char *TAG = "status.c";
-
-const char *STATUS_TIC_TXT_NOSIGNAL   = "no signal";
-const char *STATUS_TIC_TXT_HISTORIQUE = "historique";
-const char *STATUS_TIC_TXT_STANDARD   = "standard";
-const char *STATUS_TIC_TXT_NODATA = "no data";
-
-const char *STATUS_CONNECTING = "connecting...";
-const char *STATUS_CONNECTED  = "connected";
-const char *STATUS_ERROR = "error";
 
 static TimerHandle_t s_wdt_baudrate = NULL;
 static TimerHandle_t s_wdt_ticmode = NULL;
@@ -131,133 +119,39 @@ tic_error_t status_update_puissance( uint32_t puissance )
 }
 
 
-/*
-void status_wifi_sta_connecting()
-{
-    oled_update( DISPLAY_WIFI_STATUS, STATUS_CONNECTING );
-
-    // disbale upper layers 
-    //status_wifi_lost_ip();   // clear oled_ip et oled_mqtt
-}
-
-
-void status_wifi_sta_connected( const char *ssid )
-{
-    const char *txt = ( ssid == NULL ) ? STATUS_CONNECTED : ssid;
-    oled_update( DISPLAY_WIFI_STATUS, txt );
-    //status_wifi_lost_ip();   // clear oled_ip et oled_mqtt
-}
-
-
-void status_wifi_got_ip( esp_netif_ip_info_t *ip_info )
-{
-    char buf[32];
-    snprintf( buf, sizeof(buf), IPSTR, IP2STR( &(ip_info->ip) ) );
-    oled_update( DISPLAY_IP_ADDR, buf );
-    // status_mqtt_disconnected();
-}
-
-void status_wifi_lost_ip()
-{
-    oled_update( DISPLAY_IP_ADDR, "--" );
-    // status_mqtt_disconnected(); 
-}
-*/
-
-
-
-
-
-
-// *********** A DEPLACER ****************
-static struct {
-    tic_mode_t mode;
-    int baudrate;      // 0:inconnu;   1200:historique;   9600:standard
-} s_tic = { 
-    .mode = TIC_MODE_INCONNU, 
-    .baudrate = 0
-};
-
-
-void update_oled_ticmode()
-{
-    const char *msg = NULL;
-    char buf[DISPLAY_EVENT_DATA_SIZE];
-    if (s_tic.mode == TIC_MODE_HISTORIQUE)
-    {
-        msg = STATUS_TIC_TXT_HISTORIQUE;
-    } 
-    else if (s_tic.mode == TIC_MODE_STANDARD)
-    {
-        msg = STATUS_TIC_TXT_STANDARD;
-    }
-    else if (s_tic.mode == TIC_MODE_INCONNU && s_tic.baudrate>0)
-    {
-        snprintf (buf, sizeof(buf), "%d baud", s_tic.baudrate);
-        msg = buf;
-    }
-    else
-    {
-        msg = STATUS_TIC_TXT_NOSIGNAL;
-    }
-    oled_update( DISPLAY_TIC_STATUS, msg );
-}
 
 void event_baudrate (int baudrate)
 {
     ESP_LOGD( TAG, "STATUS_EVENT_BAUDRATE baudrate=%d", baudrate);
-
-    //*********TODO***********
-    // creer un handler dans OLED
-    s_tic.baudrate = baudrate;
-    update_oled_ticmode();
-
 }
 
 void event_tic_mode (tic_mode_t mode )
 {
     ESP_LOGD( TAG, "STATUS_EVENT_TIC_MODE mode=%#02x", mode);
-
-    //*********TODO***********
-    // creer un handler dans OLED
-    s_tic.mode = mode;
-    update_oled_ticmode();
 }
 
 static void event_clock_tick (const char *time_str)
 {
     ESP_LOGD( TAG, "STATUS_EVENT_CLOCK_TICK %s", time_str);
-
-    //*********TODO***********
-    oled_update( DISPLAY_CLOCK, time_str);
 }
 
 
 static void event_puissance (int puissance)
 {
     ESP_LOGD( TAG, "STATUS_EVENT_PUISSANCE %d", puissance);
-    //*********TODO***********
-    char buf[16];
-    snprintf( buf, sizeof(buf), "%d W", puissance );
-    oled_update( DISPLAY_PAPP, buf );
 }
 
 
 static void event_wifi (const char *ssid)
 {
-    ESP_LOGD( TAG, "STATUS_EVENT_WIFI '%s'", (ssid[0] ? ssid : STATUS_CONNECTING) );
-    
-    const char *txt = ( ssid == NULL ) ? STATUS_CONNECTED : ssid;
-    oled_update( DISPLAY_WIFI_STATUS, txt );
+    ESP_LOGD( TAG, "STATUS_EVENT_WIFI ssid='%s'", ssid );
 }
 
 
 static void event_mqtt( const char* status )
 {
     ESP_LOGD( TAG, "STATUS_EVENT_MQTT %s", status);
-    oled_update( DISPLAY_MQTT_STATUS, status );
 }
-
 
 // custom status event loop
 static void status_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data )
@@ -303,12 +197,10 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
         esp_netif_ip_info_t *ip_info = &event->ip_info;
         char buf[32];
         snprintf( buf, sizeof(buf), IPSTR, IP2STR( &(ip_info->ip) ) );
-        oled_update( DISPLAY_IP_ADDR, buf );
         ESP_LOGI(TAG, "Got IP %s", buf );
         break;
 
     case IP_EVENT_STA_LOST_IP:              /*!< station lost IP and the IP is reset to 0 */
-        oled_update( DISPLAY_IP_ADDR, "" );
         ESP_LOGI(TAG, "Lost IP address");
         break;
 
@@ -316,36 +208,18 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
         ESP_LOGD( TAG, "IP_EVENT id=%#lx", event_id );
     }
 }
-/*
 
-static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
-{
-    //ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%ld", base, event_id);
-    //esp_mqtt_event_handle_t event = event_data;
-
-    switch ((esp_mqtt_event_id_t)event_id) {
-    case MQTT_EVENT_BEFORE_CONNECT:
-    case MQTT_EVENT_DISCONNECTED:
-        oled_update( DISPLAY_MQTT_STATUS, STATUS_CONNECTING );
-        break;
-    case MQTT_EVENT_CONNECTED:
-        oled_update( DISPLAY_MQTT_STATUS, STATUS_CONNECTED );
-        break;
-    case MQTT_EVENT_ERROR:
-        oled_update( DISPLAY_MQTT_STATUS, STATUS_ERROR );
-        break;
-    }
-}
-*/
 
 // enregistre un handler pour les STATUS_EVENT
-tic_error_t status_register_event_handler (esp_event_handler_t handler_func, int32_t evt_id )
+tic_error_t status_register_event_handler (int32_t event_id, esp_event_handler_t handler_func, void* handler_arg
+                                          /*, esp_event_handler_instance_t* handler_ctx_arg */)
+
 {
     esp_err_t err = esp_event_handler_instance_register_with( s_status_evt_loop, 
                                                             STATUS_EVENTS,
-                                                            evt_id,
+                                                            event_id,
                                                             handler_func,
-                                                            NULL,
+                                                            handler_arg,
                                                             NULL);
     if (err!=ESP_OK)
     {
@@ -377,23 +251,10 @@ tic_error_t status_init()
     }
 
     // handler pour les STATUS_EVENT
-    tic_error_t tic_err = status_register_event_handler( &status_event_handler, ESP_EVENT_ANY_ID );
+    tic_error_t tic_err = status_register_event_handler( ESP_EVENT_ANY_ID, &status_event_handler, NULL );
     if ( tic_err != TIC_OK)
     {
         return TIC_ERR_APP_INIT;   // message loggué par status_register_event_handler()
-    }
-
-    // handler pour l'acquisition/perte d'adresse IP s'enregistre sur l'event loop par défaut
-    // TODO ************* deplacer dans OLED ************
-    esp_err = esp_event_handler_instance_register ( IP_EVENT,
-                                                    ESP_EVENT_ANY_ID, //IP_EVENT_STA_GOT_IP,
-                                                    &ip_event_handler,
-                                                    NULL,
-                                                    NULL );
-    if ( esp_err != ESP_OK)
-    {
-        ESP_LOGE (TAG, "esp_event_handler_instance_register() erreur %#02x", esp_err);
-        return TIC_ERR_APP_INIT;
     }
 
     // timers d'expiration du signal serie et du decodeur TIC

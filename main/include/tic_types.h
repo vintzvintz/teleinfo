@@ -92,16 +92,6 @@ typedef enum display_event_type_e {
 } display_event_type_t;
 
 
-#define DISPLAY_EVENT_DATA_SIZE 32
-
-typedef struct display_event_s {
-    display_event_type_t info;
-    char txt[DISPLAY_EVENT_DATA_SIZE];
-} display_event_t;
-
-
-
-
 // ***************** Status ******************
 
 typedef enum {
