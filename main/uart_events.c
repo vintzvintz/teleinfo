@@ -214,10 +214,14 @@ static void uart_rcv_task(void *pvParameters)
                     }
 
                     // decremente le compteur d'erreur quand des données sont reçues
-                    if ( (uart_err_cnt--) < 0 )
+                    uart_err_cnt--;
+
+                    // met a jour le statut s'il n'y a plus d'erreurs
+                    if (uart_err_cnt <= 0 )
                     {
-                        // met a jour le statut s'il n'y a plus d'erreurs
-                        status_update_baudrate (get_baudrate(), 0);
+                        // nb de Ticks pour recevoir 2 packets de TIC_UART_THRESOLD bytes (8 bits + stop + parity )
+                        int ticks_timeout = ( 2* TIC_UART_THRESOLD * (8+1+1) * 1000 /  portTICK_PERIOD_MS ) /get_baudrate();
+                        status_update_baudrate (get_baudrate(), ticks_timeout);
                         uart_err_cnt = 0;
                     }
 

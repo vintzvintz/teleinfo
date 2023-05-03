@@ -75,7 +75,7 @@ static void reset_watchdog ( TimerHandle_t wdt, TickType_t next_before)
         {
             xTimerChangePeriod( wdt, next_before, 1 ); 
         }
-        xTimerReset( wdt, 10);
+        xTimerReset(wdt, 10);
     }
 }
 
@@ -108,7 +108,7 @@ tic_error_t status_update_mqtt (const char *mqtt_status)
 
 tic_error_t status_update_clock( const char* time_str)
 {
-    ESP_LOGD (TAG, "status_update_mqtt(%s)", time_str);
+  //  ESP_LOGD (TAG, "status_update_mqtt(%s)", time_str);
     return post_string (time_str, STATUS_EVENT_CLOCK_TICK);
 }
 
@@ -132,7 +132,7 @@ void event_tic_mode (tic_mode_t mode )
 
 static void event_clock_tick (const char *time_str)
 {
-    ESP_LOGD( TAG, "STATUS_EVENT_CLOCK_TICK %s", time_str);
+  //  ESP_LOGD( TAG, "STATUS_EVENT_CLOCK_TICK %s", time_str);
 }
 
 

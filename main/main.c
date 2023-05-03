@@ -49,14 +49,14 @@ void app_main(void)
  //   esp_log_level_set("mqtt.c",ESP_LOG_DEBUG);
     esp_log_level_set("wifi", ESP_LOG_WARN);
     esp_log_level_set("wifi_init", ESP_LOG_WARN);
-    esp_log_level_set("uart_events.c", ESP_LOG_DEBUG);
+ //   esp_log_level_set("uart_events.c", ESP_LOG_DEBUG);
  //   esp_log_level_set("status.c", ESP_LOG_DEBUG);
 //    esp_log_level_set("decode.c", ESP_LOG_WARN);
   //  esp_log_level_set("ticled.c", ESP_LOG_DEBUG);
     //esp_log_level_set("dataset.c", ESP_LOG_DEBUG);
     //esp_log_level_set("process.c", ESP_LOG_DEBUG);
     //esp_log_level_set("puissance.c", ESP_LOG_DEBUG);
-    //esp_log_level_set("oled.cpp", ESP_LOG_DEBUG);
+  //  esp_log_level_set("oled.cpp", ESP_LOG_DEBUG);
 
 
     ESP_LOGI(TAG, "[APP] Startup..");
