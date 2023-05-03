@@ -75,8 +75,6 @@ static bool toggle_baudrate()
 }
 
 
-
-
 static int get_baudrate()
 {
     uint32_t baudrate = 0;
@@ -88,7 +86,6 @@ static int get_baudrate()
     }
     return (int)baudrate;
 }
-
 
 
 static int get_tic_mode()
@@ -169,7 +166,6 @@ static void flush_uart()
 static void uart_rcv_task(void *pvParameters)
 {
     uart_event_t event;
-//    uint8_t* dtmp = calloc(1, RD_BUF_SIZE);
     tic_char_t *tmpbuf = NULL;
     int uart_err_cnt = 0;
     int length_read;
@@ -211,21 +207,21 @@ static void uart_rcv_task(void *pvParameters)
                         ESP_LOGE( TAG, "%d bytes perdus", length_read);
                         free(tmpbuf);
                         tmpbuf=NULL;
+                        continue;
                     }
 
                     // decremente le compteur d'erreur quand des données sont reçues
-                    uart_err_cnt--;
-
-                    // met a jour le statut s'il n'y a plus d'erreurs
-                    if (uart_err_cnt <= 0 )
+                    if ( uart_err_cnt > 0 )
                     {
+                        uart_err_cnt--;
+                    }
+                    else
+                    {   
+                        // met a jour le statut s'il n'y a plus d'erreurs
                         // nb de Ticks pour recevoir 2 packets de TIC_UART_THRESOLD bytes (8 bits + stop + parity )
                         int ticks_timeout = ( 2* TIC_UART_THRESOLD * (8+1+1) * 1000 /  portTICK_PERIOD_MS ) /get_baudrate();
                         status_update_baudrate (get_baudrate(), ticks_timeout);
-                        uart_err_cnt = 0;
                     }
-
-                    //printf("%s",dtmp);
                     break;
                 //Event of HW FIFO overflow detected
                 case UART_FIFO_OVF:
@@ -264,8 +260,6 @@ static void uart_rcv_task(void *pvParameters)
             }
         }
     }
-//    free(dtmp);
-//    dtmp = NULL;
     vTaskDelete(NULL);
 }
 

@@ -6,6 +6,7 @@
 #include "freertos/event_groups.h"
 #include "driver/gpio.h"
 
+#include "esp_netif.h"      // pour les IP_EVENT
 #include "esp_log.h"
 
 #include "lcdgfx.h"
@@ -129,11 +130,13 @@ private:
     void refresh();
     int line_length();
 
-    // handler appelé par l'event loop ESP
-    static void status_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data );
-    
+    // handlers enregistrés sur les event loops ESP - ne peuvent pas être des fonctions membre
+    static void static_ip_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data );
+    static void static_status_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data );
+
     // reception des evènements entrants
-    void event_handler( esp_event_base_t event_base, int32_t event_id, void *event_data );
+    void ip_event_handler( esp_event_base_t event_base, int32_t event_id, void *event_data );
+    void status_event_handler( esp_event_base_t event_base, int32_t event_id, void *event_data );
     void update_tic_et_baudrate();
     void event_baudrate (int baudrate);
     void event_tic_mode (tic_mode_t mode);
@@ -218,10 +221,15 @@ tic_error_t TicDisplay::setup()
         return TIC_ERR_APP_INIT;
     }
 
-    // handler pour les STATUS_EVENT
-    tic_error_t tic_err = status_register_event_handler( ESP_EVENT_ANY_ID, &status_event_handler, this );
-    if ( tic_err != TIC_OK)
+    // handler pour recevoir les evenements sur l'event loop crée dans status.c
+    tic_error_t err1 = status_register_event_handler( ESP_EVENT_ANY_ID, &static_status_event_handler, this );
+
+    // handler pour les IP_EVENT sur l'eventloop par défaut du système
+    esp_err_t err2 = esp_event_handler_instance_register( IP_EVENT, ESP_EVENT_ANY_ID, &static_ip_event_handler, this, NULL );
+
+    if ( err1 != TIC_OK || err2 != ESP_OK )
     {
+        ESP_LOGE( TAG, "Erreur d'enregistrement des event_handlers" );
         return TIC_ERR_APP_INIT;   // message loggué par status_register_event_handler()
     }
 
@@ -385,25 +393,11 @@ void status_wifi_sta_connected( const char *ssid )
     //status_wifi_lost_ip();   // clear oled_ip et oled_mqtt
 }
 
-
-void status_wifi_got_ip( esp_netif_ip_info_t *ip_info )
-{
-    char buf[32];
-    snprintf( buf, sizeof(buf), IPSTR, IP2STR( &(ip_info->ip) ) );
-    oled_update( DISPLAY_IP_ADDR, buf );
-    // status_mqtt_disconnected();
-}
-
-void status_wifi_lost_ip()
-{
-    oled_update( DISPLAY_IP_ADDR, "--" );
-    // status_mqtt_disconnected(); 
-}
 */
 
 
 
-void TicDisplay::event_handler( esp_event_base_t event_base, int32_t event_id, void *event_data )
+void TicDisplay::status_event_handler( esp_event_base_t event_base, int32_t event_id, void *event_data )
 {
     assert ( event_base==STATUS_EVENTS);
     switch( event_id )
@@ -428,18 +422,51 @@ void TicDisplay::event_handler( esp_event_base_t event_base, int32_t event_id, v
             break;
         case STATUS_EVENT_NONE:
         default:
-            ESP_LOGW( TAG, "STATUS_EVENT_NONE ou invalide");
+            ESP_LOGW( TAG, "STATUS_EVENT id %" PRIi32 " inconnu", event_id);
     }
 }
 
-// custom status event loop
-void TicDisplay::status_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data )
+
+void TicDisplay::ip_event_handler( esp_event_base_t event_base, int32_t event_id, void *event_data )
+{
+    assert ( event_base==IP_EVENT);
+    ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
+
+    switch( event_id ) 
+    {
+    case IP_EVENT_STA_GOT_IP:               // !< station got IP from connected AP 
+        char buf[32];
+        snprintf( buf, sizeof(buf), IPSTR, IP2STR( &(event->ip_info.ip) ) );
+        oled_update( DISPLAY_IP_ADDR, buf );
+        ESP_LOGI(TAG, "Got IP %s", buf);
+        break;
+    case IP_EVENT_STA_LOST_IP:              // !< station lost IP and the IP is reset to 0
+        ESP_LOGI(TAG, "IP_EVENT_LOST_IP");
+        oled_update( DISPLAY_IP_ADDR, "" );
+        break;
+    default:
+        ESP_LOGD( TAG, "IP_EVENT id=%#lx", event_id );
+    }
+}
+
+
+// fonction statique appelée par les event loop
+void TicDisplay::static_ip_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data )
 {
     // handler_arg doit être un pointeur vers TicDisplay
     TicDisplay *display = (TicDisplay *)arg;
-    display->event_handler (event_base, event_id, event_data);
+    display->ip_event_handler (event_base, event_id, event_data);
 }
 
+
+
+// fonction statique appelée par les event loop
+void TicDisplay::static_status_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data )
+{
+    // handler_arg doit être un pointeur vers TicDisplay
+    TicDisplay *display = (TicDisplay *)arg;
+    display->status_event_handler (event_base, event_id, event_data);
+}
 
 static void oled_task(void *pvParams)
 {
