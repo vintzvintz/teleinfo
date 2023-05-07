@@ -16,6 +16,8 @@
 #include "status.h"         // pour status_update_baudrate()
 
 
+#define UART_TELEINFO_SIGNAL_GPIO CONFIG_TIC_UART_GPIO   // GPIO_NUM_2
+
 static const char *TAG = "uart_events.c";
 
 #define BUF_SIZE 512
@@ -295,7 +297,7 @@ tic_error_t uart_task_start( )
         ESP_LOGE( TAG, "erreur dans uart_param_config()" );
     }
 
-    err = uart_set_pin(UART_TELEINFO_NUM, UART_PIN_NO_CHANGE, UART_TELEINFO_SIGNAL_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    err = uart_set_pin(UART_TELEINFO_NUM, UART_PIN_NO_CHANGE, UART_TELEINFO_SIGNAL_GPIO, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     if( err != ESP_OK  )
     {
         ESP_LOGE( TAG, "uart_set_pin() erreur %d", err);

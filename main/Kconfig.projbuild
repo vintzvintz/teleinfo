@@ -1,5 +1,13 @@
 menu "Teleinfo Configuration"
 
+    config TIC_UART_GPIO
+        int "GPIO pour réception UART du module d'interface TIC"
+        default 2
+
+    config TIC_LED_GPIO
+        int "GPIO pour la LED du module d'interface TIC"
+        default 3
+
     choice TIC_WIFI_SCAN_AUTH_MODE_THRESHOLD
         prompt "WiFi Scan auth mode threshold"
         default TIC_WIFI_AUTH_OPEN
@@ -23,5 +31,42 @@ menu "Teleinfo Configuration"
         config TIC_WIFI_AUTH_WAPI_PSK
             bool "WAPI PSK"
     endchoice
+ 
+    config TIC_OLED_DISPLAY
+        bool "Enable SSD1306 display support"
+        default n
+        help
+            Enable SSD1306 128x64 I2C display
+            Use LCDGFX library
+
+    config TIC_OLED_DISPLAY_SCL
+        int 
+        prompt "GPIO pin for SCL"
+        depends on TIC_OLED_DISPLAY
+        default 0
+
+    config TIC_OLED_DISPLAY_SDA
+        int 
+        prompt "GPIO pin for SDA"
+        depends on TIC_OLED_DISPLAY
+        default 1
+
+    config TIC_OLED_DISPLAY_ADDR
+        hex
+        prompt "SSD1306 display I2C address"
+        default 0x3C
+        depends on TIC_OLED_DISPLAY
+        help
+            Adresse I2C hexadecimale (0x3C ou 0x3D)
+
+    config TIC_SNTP
+        bool "Enable sntp time synchronisation"
+        default y
+
+    config TIC_SNTP_SERVER
+        string "SNTP server name"
+        depends on TIC_SNTP
+        default "fr.pool.ntp.org"
+
 
 endmenu

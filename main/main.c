@@ -14,11 +14,16 @@
 #include "process.h"
 #include "wifi.h"
 #include "mqtt.h"
-#include "oled.h"
-#include "ticled.h"
-#include "clock.h"
+#ifdef CONFIG_TIC_OLED_DISPLAY
+  #include "oled.h"
+#endif
+#ifdef CONFIG_TIC_SNTP
+  #include "clock.h"
+#endif
+
 #include "status.h"
-#include "bouton.h"
+//#include "bouton.h"
+#include "ticled.h"
 #include "tic_console.h"
 
 
@@ -79,13 +84,19 @@ void app_main(void)
     tzset();
 
 //    start_bouton_task();
+
+#ifdef CONFIG_TIC_OLED_DISPLAY
     oled_task_start();
+#endif
+
     ticled_task_start();
     uart_task_start();
     tic_decode_task_start();
     process_task_start();
     mqtt_task_start( 0 );   // 0=lance le client mqtt   1=dummy/debug
-    clock_task_start();
 
+#ifdef CONFIG_TIC_SNTP
+    clock_task_start();
+#endif
 }
 

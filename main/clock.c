@@ -8,6 +8,9 @@
 #include "freertos/stream_buffer.h"
 #include "freertos/event_groups.h"
 
+
+#ifdef CONFIG_TIC_SNTP
+
 #include "esp_netif.h"
 #include "esp_log.h"
 
@@ -18,6 +21,9 @@
 #include "clock.h"
 #include "tic_config.h"    // pour l'adresse du serveur SNTP
 #include "status.h"
+
+// from Kconfig
+#define CLOCK_SERVER_NAME CONFIG_TIC_SNTP_SERVER
 
 static const char *TAG = "clock.c";
 
@@ -105,3 +111,6 @@ tic_error_t clock_task_start()
     }
     return TIC_OK;
 }
+
+
+#endif // CONFIG_TIC_SNTP

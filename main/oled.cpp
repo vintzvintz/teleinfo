@@ -9,15 +9,30 @@
 #include "esp_netif.h"      // pour les IP_EVENT
 #include "esp_log.h"
 
+
+#ifdef CONFIG_TIC_OLED_DISPLAY
+
+
+/*
+    #define OLED_GPIO_RST    -1
+    #define OLED_GPIO_SCL    GPIO_NUM_0
+    #define OLED_GPIO_SDA    GPIO_NUM_1
+    #define OLED_I2C_ADDRESS 0x3C 
+*/
+#define OLED_GPIO_RST    -1
+#define OLED_GPIO_SCL    CONFIG_TIC_OLED_DISPLAY_SCL
+#define OLED_GPIO_SDA    CONFIG_TIC_OLED_DISPLAY_SDA
+#define OLED_I2C_ADDRESS CONFIG_TIC_OLED_DISPLAY_ADDR
+
+
 #include "lcdgfx.h"
 #include "lcdgfx_gui.h"
 
 #include "tic_types.h"
-#include "tic_config.h"
+//#include "tic_config.h"
 #include "status.h"
 #include "oled.h"
 #include "status.h"
-
 
 static const char *TAG = "oled.cpp";
 
@@ -488,3 +503,4 @@ extern "C" tic_error_t oled_task_start( )
 }
 
 
+#endif   // CONFIG_TIC_OLED_DISPLAY

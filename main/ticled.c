@@ -9,11 +9,14 @@
 
 
 #include "tic_types.h"
-#include "tic_config.h"     // led GPIO pin
+//#include "tic_config.h"     // led GPIO pin
 #include "status.h"          // pour status_register_event_handler()
 #include "ticled.h"
 
 static const char *TAG = "ticled.c";
+
+// from KConfig
+#define LED_GPIO     CONFIG_TIC_LED_GPIO    // GPIO_NUM_3
 
 // Durée des clingotements
 #define BLINK_COURT_ON    250         // ms
@@ -67,21 +70,21 @@ static void ticled_task( void *pvParams )
                     portMAX_DELAY ); // Wait a max
 
         //  allume la led
-        gpio_set_level( TIC_GPIO_LED, 1 );
+        gpio_set_level( LED_GPIO, 1 );
 
         // clignote long ou court
         if( ( uxBits & BIT_BLINK_LONG) != 0 )
         {
             ESP_LOGD( TAG, "long blink" );
             vTaskDelay( BLINK_LONG_ON / portTICK_PERIOD_MS );
-            gpio_set_level( TIC_GPIO_LED, 0 );
+            gpio_set_level( LED_GPIO, 0 );
             vTaskDelay( BLINK_LONG_OFF/ portTICK_PERIOD_MS );
         }
         else if( ( uxBits & BIT_BLINK_COURT ) != 0 )
         {
             ESP_LOGD( TAG, "short blink" );
             vTaskDelay( BLINK_COURT_ON / portTICK_PERIOD_MS );
-            gpio_set_level( TIC_GPIO_LED, 0 );
+            gpio_set_level( LED_GPIO, 0 );
             vTaskDelay( BLINK_COURT_OFF/ portTICK_PERIOD_MS );
         }
     }
@@ -98,13 +101,13 @@ tic_error_t ticled_task_start()
 
     // init GPIO
     esp_err_t esp_err;
-    esp_err = gpio_set_direction( TIC_GPIO_LED, GPIO_MODE_OUTPUT );
+    esp_err = gpio_set_direction( LED_GPIO, GPIO_MODE_OUTPUT );
     if (esp_err != ESP_OK)
     {
         ESP_LOGE( TAG, "gpio_set_direction() erreur %#02x", esp_err);
         return TIC_ERR_APP_INIT;
     }
-    esp_err = gpio_set_level( TIC_GPIO_LED, 0 );
+    esp_err = gpio_set_level( LED_GPIO, 0 );
     if (esp_err != ESP_OK)
     {
         ESP_LOGE( TAG, "gpio_set_levet() erreur %#02x", esp_err);

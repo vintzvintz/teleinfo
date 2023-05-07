@@ -17,6 +17,10 @@
 #include "status.h"
 
 
+// delai max entre deux réceptions de données UART
+// pour initialiser le timer, ensuite le timout est calculé par uart_events.c
+#define STATUS_BAUDRATE_DEFAULT_TIMEOUT   500     // ms
+
 static const char *TAG = "status.c";
 
 static TimerHandle_t s_wdt_baudrate = NULL;
@@ -183,7 +187,7 @@ static void status_event_handler(void *event_handler_arg, esp_event_base_t event
     }
 }
 
-
+/*
 // default ESP event loop
 static void ip_event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
@@ -192,7 +196,7 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
 
     switch( event_id ) 
     {
-    case IP_EVENT_STA_GOT_IP:               /*!< station got IP from connected AP */
+    case IP_EVENT_STA_GOT_IP:               //  station got IP from connected AP 
         
         esp_netif_ip_info_t *ip_info = &event->ip_info;
         char buf[32];
@@ -200,7 +204,7 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
         ESP_LOGI(TAG, "Got IP %s", buf );
         break;
 
-    case IP_EVENT_STA_LOST_IP:              /*!< station lost IP and the IP is reset to 0 */
+    case IP_EVENT_STA_LOST_IP:              // station lost IP and the IP is reset to 0 
         ESP_LOGI(TAG, "Lost IP address");
         break;
 
@@ -208,7 +212,7 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
         ESP_LOGD( TAG, "IP_EVENT id=%#lx", event_id );
     }
 }
-
+*/
 
 // enregistre un handler pour les STATUS_EVENT
 tic_error_t status_register_event_handler (int32_t event_id, esp_event_handler_t handler_func, void* handler_arg
