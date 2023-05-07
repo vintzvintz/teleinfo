@@ -159,7 +159,7 @@ static int mqtt_psk_set(int argc, char **argv)
 
 
 
-static int show_status(int argc, char**argv)
+static int show_params(int argc, char**argv)
 {
     char missing[] = "<aucun>";
     char *ssid     = NULL;
@@ -260,13 +260,13 @@ static void register_mqtt_psk_set(void)
 }
 
 
-static void register_status(void)
+static void register_show_params(void)
 {
     const esp_console_cmd_t status_cmd = {
-        .command = "status",
-        .help = "Voir le statut du device\n",
+        .command = "show_params",
+        .help = "Voir les parametres définis en NVS\n",
         .hint = NULL,
-        .func = &show_status,
+        .func = &show_params,
     };
     ESP_ERROR_CHECK(esp_console_cmd_register(&status_cmd));
 }
@@ -274,7 +274,7 @@ static void register_status(void)
 
 void console_register_commands(void)
 {
-    register_status();
+    register_show_params();
     register_wifi_set();
     register_wifi_scan();
     register_mqtt_broker_set();
