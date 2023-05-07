@@ -21,8 +21,7 @@
   #include "clock.h"
 #endif
 
-#include "status.h"
-//#include "bouton.h"
+#include "event_loop.h"
 #include "ticled.h"
 #include "tic_console.h"
 
@@ -68,7 +67,7 @@ void app_main(void)
     ESP_LOGI(TAG, "[APP] Free memory: %lu bytes", esp_get_free_heap_size());
     ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
 
-    status_init();
+    event_loop_init();
 
     // non volatile storage utilisé pour
     //   - wifi driver

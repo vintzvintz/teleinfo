@@ -14,7 +14,7 @@
 
 #include "tic_types.h"
 #include "tic_config.h"
-#include "status.h"
+#include "event_loop.h"
 #include "mqtt.h"
 #include "nvs_utils.h"
 
@@ -127,15 +127,15 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     switch ((esp_mqtt_event_id_t)event_id) {
     case MQTT_EVENT_BEFORE_CONNECT:
         ESP_LOGI(TAG, "MQTT_EVENT_BEFORE CONNECT");
-        status_update_mqtt ("connecting...");
+        send_event_mqtt ("connecting...");
         break;
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED to %s", (s_mqtt_cfg.broker.address.uri) );
-        status_update_mqtt( "connected" );
+        send_event_mqtt( "connected" );
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
-        status_update_mqtt( "connecting..." );
+        send_event_mqtt( "connecting..." );
         break;
     case MQTT_EVENT_SUBSCRIBED:
         ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
@@ -159,7 +159,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             log_error_if_nonzero("captured as transport's socket errno",  event->error_handle->esp_transport_sock_errno);
             ESP_LOGI(TAG, "Last errno string (%s)", strerror(event->error_handle->esp_transport_sock_errno));
         }
-        status_update_mqtt( "error" );
+        send_event_mqtt( "error" );
         break;
     default:
         ESP_LOGI(TAG, "Other event id:%d", event->event_id);

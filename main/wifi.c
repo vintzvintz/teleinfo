@@ -13,7 +13,7 @@
 
 #include "tic_types.h"
 #include "tic_config.h"     // NVS entries names for wifi credentials
-#include "status.h"         // pour notifier l'etat de la connexion wifi
+#include "event_loop.h"         // pour notifier l'etat de la connexion wifi
 #include "wifi.h"
 #include "nvs_utils.h"
 #include "tic_console.h"
@@ -105,7 +105,7 @@ tic_error_t wifi_reconnect()
     esp_wifi_disconnect ();    // ignore errors
     err = set_wifi_config ();
 
-    status_update_wifi ("");  // ignore errors
+    send_event_wifi ("");  // ignore errors
     xEventGroupSetBits (s_wifi_events, BIT_TRY_RECONNECT );
     return err;
 }
@@ -173,7 +173,7 @@ static void handle_sta_connected( const wifi_event_sta_connected_t *event_data )
                 ssid, event_data->channel, event_data->authmode );
 
     // update system status and events
-    status_update_wifi( ssid );
+    send_event_wifi( ssid );
     xEventGroupClearBits( s_wifi_events, BIT_TRY_RECONNECT );
 
 }

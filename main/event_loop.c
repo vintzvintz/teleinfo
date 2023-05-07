@@ -14,7 +14,7 @@
 
 #include "tic_types.h"
 #include "tic_config.h"
-#include "status.h"
+#include "event_loop.h"
 
 
 // delai max entre deux réceptions de données UART
@@ -84,39 +84,39 @@ static void reset_watchdog ( TimerHandle_t wdt, TickType_t next_before)
 }
 
 
-tic_error_t status_update_baudrate (int baudrate, TickType_t next_before)
+tic_error_t send_event_baudrate (int baudrate, TickType_t next_before)
 {
     ESP_LOGD (TAG, "status_update_baudrate(%d)", baudrate);
     reset_watchdog (s_wdt_baudrate, next_before);
     return post_integer( baudrate, STATUS_EVENT_BAUDRATE );
 }
 
-tic_error_t status_update_tic_mode( tic_mode_t mode, TickType_t next_before)
+tic_error_t send_event_tic_mode( tic_mode_t mode, TickType_t next_before)
 {
     ESP_LOGD (TAG, "status_update_tic_mode(%d)", mode);
     reset_watchdog (s_wdt_ticmode, next_before);
     return post_integer ((int)mode, STATUS_EVENT_TIC_MODE);
 }
 
-tic_error_t status_update_wifi (const char* ssid)
+tic_error_t send_event_wifi (const char* ssid)
 {
     ESP_LOGD (TAG, "status_update_wifi() ssid='%s'", ssid);
     return post_string( ssid, STATUS_EVENT_WIFI);
 }
 
-tic_error_t status_update_mqtt (const char *mqtt_status)
+tic_error_t send_event_mqtt (const char *mqtt_status)
 {
     ESP_LOGD (TAG, "status_update_mqtt(%s)", mqtt_status);
     return post_string (mqtt_status, STATUS_EVENT_MQTT);
 }
 
-tic_error_t status_update_clock( const char* time_str)
+tic_error_t send_event_clock( const char* time_str)
 {
   //  ESP_LOGD (TAG, "status_update_mqtt(%s)", time_str);
     return post_string (time_str, STATUS_EVENT_CLOCK_TICK);
 }
 
-tic_error_t status_update_puissance( uint32_t puissance )
+tic_error_t send_event_puissance( uint32_t puissance )
 {
     ESP_LOGD (TAG, "status_update_puissance( %"PRIu32" )", puissance);
     return post_integer (puissance, STATUS_EVENT_PUISSANCE);
@@ -215,7 +215,7 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
 */
 
 // enregistre un handler pour les STATUS_EVENT
-tic_error_t status_register_event_handler (int32_t event_id, esp_event_handler_t handler_func, void* handler_arg
+tic_error_t tic_register_event_handler (int32_t event_id, esp_event_handler_t handler_func, void* handler_arg
                                           /*, esp_event_handler_instance_t* handler_ctx_arg */)
 
 {
@@ -234,7 +234,7 @@ tic_error_t status_register_event_handler (int32_t event_id, esp_event_handler_t
 }
 
 
-tic_error_t status_init()
+tic_error_t event_loop_init()
 {
     esp_err_t esp_err;
 
@@ -255,7 +255,7 @@ tic_error_t status_init()
     }
 
     // handler pour les STATUS_EVENT
-    tic_error_t tic_err = status_register_event_handler( ESP_EVENT_ANY_ID, &status_event_handler, NULL );
+    tic_error_t tic_err = tic_register_event_handler( ESP_EVENT_ANY_ID, &status_event_handler, NULL );
     if ( tic_err != TIC_OK)
     {
         return TIC_ERR_APP_INIT;   // message loggué par status_register_event_handler()

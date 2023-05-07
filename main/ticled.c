@@ -9,8 +9,7 @@
 
 
 #include "tic_types.h"
-//#include "tic_config.h"     // led GPIO pin
-#include "status.h"          // pour status_register_event_handler()
+#include "event_loop.h"          // pour status_register_event_handler()
 #include "ticled.h"
 
 static const char *TAG = "ticled.c";
@@ -116,7 +115,7 @@ tic_error_t ticled_task_start()
 
     // enregistre un handler pour reecevoir les notifications BAUDRATE et TIC_MODE
     tic_error_t err;
-    err = status_register_event_handler (ESP_EVENT_ANY_ID, status_event_handler, NULL);
+    err = tic_register_event_handler (ESP_EVENT_ANY_ID, status_event_handler, NULL);
     if (err != TIC_OK)
     {
         ESP_LOGE( TAG, "status_register_event_handler()) erreur %#02x", err);

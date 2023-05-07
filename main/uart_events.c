@@ -10,10 +10,10 @@
 
 
 #include "tic_types.h"
-#include "tic_config.h"     // uart rx pin
+#include "tic_config.h"
 #include "uart_events.h"
 #include "decode.h"         // pour decode_incming_bytes()
-#include "status.h"         // pour status_update_baudrate()
+#include "event_loop.h"     // pour status_update_baudrate()
 
 
 #define UART_TELEINFO_SIGNAL_GPIO CONFIG_TIC_UART_GPIO   // GPIO_NUM_2
@@ -222,7 +222,7 @@ static void uart_rcv_task(void *pvParameters)
                         // met a jour le statut s'il n'y a plus d'erreurs
                         // nb de Ticks pour recevoir 2 packets de TIC_UART_THRESOLD bytes (8 bits + stop + parity )
                         int ticks_timeout = ( 2* TIC_UART_THRESOLD * (8+1+1) * 1000 /  portTICK_PERIOD_MS ) /get_baudrate();
-                        status_update_baudrate (get_baudrate(), ticks_timeout);
+                        send_event_baudrate (get_baudrate(), ticks_timeout);
                     }
                     break;
                 //Event of HW FIFO overflow detected

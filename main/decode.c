@@ -9,7 +9,7 @@
 #include "dataset.h"
 #include "decode.h"
 #include "process.h"
-#include "status.h"
+#include "event_loop.h"
 
 static const char *TAG = "decode.c";
 
@@ -250,7 +250,7 @@ static tic_error_t decode_frame_end( tic_decoder_t *td )
     ESP_LOGD( TAG, "Trame de %"PRIi32" datasets reçue", dataset_count(td->datasets) );
 
     // signale la réception correcte d'une trame
-    status_update_tic_mode( td->mode, 0 );
+    send_event_tic_mode( td->mode, 0 );
 
     //uint32_t nb = tic_dataset_count( td->datasets );
     //uint32_t size = tic_dataset_size( td->datasets );

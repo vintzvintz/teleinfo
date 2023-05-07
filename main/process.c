@@ -14,7 +14,7 @@
 #include "tic_types.h"
 #include "tic_config.h"
 #include "dataset.h"
-#include "status.h"      // pour status_update_puissance()
+#include "event_loop.h"
 #include "mqtt.h"        // pour mqtt_msg_alloc() mqtt_msg_free()
 #include "process.h"
 #include "puissance.h"
@@ -188,7 +188,7 @@ static tic_error_t build_mqtt_msg( mqtt_msg_t *msg, dataset_t *ds, const tic_dat
 static tic_error_t traite_donnees( const tic_data_t *data )
 {
     // mise à jour afficheur oled, etc
-    status_update_puissance (data->puissance_app); // ignore errors
+    send_event_puissance (data->puissance_app); // ignore errors
 
     // envoie la trame au module de calcul de puissance active
     puissance_incoming_data( data );     // ignore erreurs

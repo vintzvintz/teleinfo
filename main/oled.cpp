@@ -12,27 +12,18 @@
 
 #ifdef CONFIG_TIC_OLED_DISPLAY
 
-
-/*
-    #define OLED_GPIO_RST    -1
-    #define OLED_GPIO_SCL    GPIO_NUM_0
-    #define OLED_GPIO_SDA    GPIO_NUM_1
-    #define OLED_I2C_ADDRESS 0x3C 
-*/
-#define OLED_GPIO_RST    -1
-#define OLED_GPIO_SCL    CONFIG_TIC_OLED_DISPLAY_SCL
-#define OLED_GPIO_SDA    CONFIG_TIC_OLED_DISPLAY_SDA
-#define OLED_I2C_ADDRESS CONFIG_TIC_OLED_DISPLAY_ADDR
-
-
 #include "lcdgfx.h"
 #include "lcdgfx_gui.h"
 
 #include "tic_types.h"
-//#include "tic_config.h"
-#include "status.h"
+#include "event_loop.h"
 #include "oled.h"
-#include "status.h"
+
+// from Kconfig
+#define OLED_GPIO_RST    -1
+#define OLED_GPIO_SCL    CONFIG_TIC_OLED_DISPLAY_SCL           // GPIO_NUM_0
+#define OLED_GPIO_SDA    CONFIG_TIC_OLED_DISPLAY_SDA           // GPIO_NUM_1
+#define OLED_I2C_ADDRESS CONFIG_TIC_OLED_DISPLAY_ADDR          // 0x3C
 
 static const char *TAG = "oled.cpp";
 
@@ -44,23 +35,20 @@ const SPlatformI2cConfig tic_default_display_config = {
     .frequency = 0 
 };
 
-const char *LABEL_UART = "UART";
-const char *LABEL_TIC  = " TIC";
-const char *LABEL_WIFI  = "Wifi";
-const char *LABEL_IP_ADDR  = "  IP";
-const char *LABEL_MQTT_STATUS  = "MQTT";
-const char *LABEL_CLOCK = "Time";
-const char *LABEL_PAPP  = "PAPP";
-const char *LABEL_MESSAGE  = "MSG:";
+static const char *LABEL_TIC  = " TIC";
+static const char *LABEL_WIFI  = "Wifi";
+static const char *LABEL_IP_ADDR  = "  IP";
+static const char *LABEL_MQTT_STATUS  = "MQTT";
+static const char *LABEL_CLOCK = "Time";
+static const char *LABEL_PAPP  = "PAPP";
+static const char *LABEL_MESSAGE  = "MSG:";
 
 
 static const char *STATUS_TIC_TXT_NOSIGNAL   = "no signal";
 static const char *STATUS_TIC_TXT_HISTORIQUE = "historique";
 static const char *STATUS_TIC_TXT_STANDARD   = "standard";
-//static const char *STATUS_TIC_TXT_NODATA = "no data";
 static const char *STATUS_CONNECTING = "connecting...";
 static const char *STATUS_CONNECTED  = "connected";
-//static const char *STATUS_ERROR = "error";
 
 
 #define LINE_BUF_SIZE 32
@@ -237,7 +225,7 @@ tic_error_t TicDisplay::setup()
     }
 
     // handler pour recevoir les evenements sur l'event loop crée dans status.c
-    tic_error_t err1 = status_register_event_handler( ESP_EVENT_ANY_ID, &static_status_event_handler, this );
+    tic_error_t err1 = tic_register_event_handler( ESP_EVENT_ANY_ID, &static_status_event_handler, this );
 
     // handler pour les IP_EVENT sur l'eventloop par défaut du système
     esp_err_t err2 = esp_event_handler_instance_register( IP_EVENT, ESP_EVENT_ANY_ID, &static_ip_event_handler, this, NULL );

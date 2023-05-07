@@ -20,7 +20,7 @@
 
 #include "clock.h"
 #include "tic_config.h"    // pour l'adresse du serveur SNTP
-#include "status.h"
+#include "event_loop.h"
 
 // from Kconfig
 #define CLOCK_SERVER_NAME CONFIG_TIC_SNTP_SERVER
@@ -71,12 +71,12 @@ void clock_task( void *pvParams )
             now = time(NULL);
             localtime_r( &now, &timeinfo );
             strftime( buf, sizeof(buf), "%H:%M:%S", &timeinfo );
-            status_update_clock( buf );
+            send_event_clock( buf );
         }
         else
         {
             // not synchronised
-            status_update_clock( "no sntp" );
+            send_event_clock( "no sntp" );
         }
         vTaskDelay( 1000 / portTICK_PERIOD_MS );
     }
