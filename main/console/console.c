@@ -209,7 +209,6 @@ static void console_task(void *pvParams)
 
 tic_error_t console_task_start()
 {
-    esp_log_level_set( TAG, ESP_LOG_INFO );
     ESP_LOGD( TAG, "console_task_start()" );
 
     if ( xTaskCreate( console_task, "console_task", 4096, NULL, 2, NULL ) != pdPASS )

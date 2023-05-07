@@ -321,8 +321,6 @@ static void wifi_loop( void * pvParams )
 
 tic_error_t wifi_task_start( )
 {
-    esp_log_level_set(TAG, ESP_LOG_DEBUG);
-
     // FreeRTOS event group to signal when we are connected
     s_wifi_events = xEventGroupCreate();
     if( s_wifi_events == NULL )

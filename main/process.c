@@ -278,9 +278,6 @@ tic_error_t process_receive_datasets( dataset_t *ds )
 
 tic_error_t process_task_start( QueueHandle_t to_decoder, QueueHandle_t to_mqtt )
 {
-    esp_log_level_set( TAG, ESP_LOG_DEBUG );
-    esp_log_level_set( "puissance.c", ESP_LOG_DEBUG );
-
     puissance_init();
 
     // reçoit les trames décodées par decode_task
