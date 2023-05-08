@@ -485,15 +485,20 @@ tic_error_t decode_incoming_bytes( tic_char_t *buf , size_t len, tic_mode_t mode
 }
 
 // Create a task to decode teleinfo raw bytestream received from uart
-void tic_decode_task_start( )
+tic_error_t tic_decode_task_start( )
 {
-
-    // transfere le flux de données brutes depuis l'UART vers le decodeur
+    // transfere les packets de données depuis l'UART vers le decodeur
     s_incoming_bytes = xQueueCreate (INCOMING_QUEUE_SIZE, sizeof(tic_bytes_t));
     if (s_incoming_bytes == NULL)
     {
         ESP_LOGE (TAG, "xQueueCreate() failed");
+        return TIC_ERR_APP_INIT;
     }
 
-    xTaskCreate(tic_decode_task, "tic_decode_task", 4096, NULL, 12, NULL);
+    if( xTaskCreate(tic_decode_task, "tic_decode_task", 4096, NULL, 12, NULL) != pdPASS )
+    {
+        ESP_LOGE (TAG, "xTaskCreate() failed");
+        return TIC_ERR_APP_INIT;
+    }
+    return TIC_OK;
 }
