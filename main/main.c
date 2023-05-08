@@ -54,8 +54,9 @@ void app_main(void)
  //   esp_log_level_set("wifi", ESP_LOG_WARN);
  //   esp_log_level_set("wifi_init", ESP_LOG_WARN);
  //   esp_log_level_set("uart_events.c", ESP_LOG_DEBUG);
+    esp_log_level_set("event_loop.c", ESP_LOG_DEBUG);
  //   esp_log_level_set("status.c", ESP_LOG_DEBUG);
-//    esp_log_level_set("decode.c", ESP_LOG_WARN);
+    esp_log_level_set("decode.c", ESP_LOG_WARN);
   //  esp_log_level_set("ticled.c", ESP_LOG_DEBUG);
     //esp_log_level_set("dataset.c", ESP_LOG_DEBUG);
     //esp_log_level_set("process.c", ESP_LOG_DEBUG);

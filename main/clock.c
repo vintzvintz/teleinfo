@@ -59,7 +59,6 @@ void sntp_callback( struct timeval *tv )
 
 void clock_task( void *pvParams )
 {
-    ESP_LOGI( TAG, "clock_task()" );
     time_t now;
     struct tm timeinfo;
     char buf[20];
@@ -85,7 +84,7 @@ void clock_task( void *pvParams )
 
 tic_error_t clock_task_start()
 {
-    ESP_LOGI( TAG, "clock_task_start()");
+    ESP_LOGD( TAG, "clock_task_start()");
 
     // initialize SNTP client
     sntp_setoperatingmode(SNTP_OPMODE_POLL);
