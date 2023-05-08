@@ -21,9 +21,9 @@
 // pour initialiser le timer, ensuite le timout est calculé par uart_events.c
 #define STATUS_BAUDRATE_DEFAULT_TIMEOUT   500     // ms
 
-static const char *TAG = "status.c";
+static const char *TAG = "event_loop.c";
 
-static TimerHandle_t s_wdt_baudrate = NULL;
+//static TimerHandle_t s_wdt_baudrate = NULL;
 static TimerHandle_t s_wdt_ticmode = NULL;
 
 // Status event definitions 
@@ -64,12 +64,14 @@ static void tic_mode_timeout()
     ESP_LOGD (TAG, "watchdog status tic_mode expiré");
     post_integer ( TIC_MODE_INCONNU, STATUS_EVENT_TIC_MODE);   // ignore erreur
 }
-
+/*
 static void baudrate_timeout()
 {
     ESP_LOGD (TAG, "watchdog status baudrate expiré");
     post_integer (0, STATUS_EVENT_BAUDRATE);            // ignore erreur
 }
+*/
+
 
 static void reset_watchdog ( TimerHandle_t wdt, TickType_t next_before)
 {
@@ -84,10 +86,10 @@ static void reset_watchdog ( TimerHandle_t wdt, TickType_t next_before)
 }
 
 
-tic_error_t send_event_baudrate (int baudrate, TickType_t next_before)
+tic_error_t send_event_baudrate (int baudrate/*, TickType_t next_before*/)
 {
     ESP_LOGD (TAG, "status_update_baudrate(%d)", baudrate);
-    reset_watchdog (s_wdt_baudrate, next_before);
+    //reset_watchdog (s_wdt_baudrate, next_before);
     return post_integer( baudrate, STATUS_EVENT_BAUDRATE );
 }
 
@@ -260,7 +262,7 @@ tic_error_t event_loop_init()
     {
         return TIC_ERR_APP_INIT;   // message loggué par status_register_event_handler()
     }
-
+/*
     // timers d'expiration du signal serie et du decodeur TIC
     s_wdt_baudrate = xTimerCreate( "uart_timer", 
                                 STATUS_BAUDRATE_DEFAULT_TIMEOUT / portTICK_PERIOD_MS, 
@@ -268,18 +270,19 @@ tic_error_t event_loop_init()
                                 NULL, 
                                 baudrate_timeout );
                                 
+*/
     s_wdt_ticmode = xTimerCreate( "decode_status_timer", 
                                     STATUS_TICMODE_DEFAUT_TIMEOUT / portTICK_PERIOD_MS,
                                     pdFALSE,
                                     NULL,
                                     tic_mode_timeout );
 
-    if (!s_wdt_baudrate || !s_wdt_ticmode)
+    if ( /*!s_wdt_baudrate ||*/ !s_wdt_ticmode)
     {
         ESP_LOGE (TAG, "xTimerCreate() failed");
         return TIC_ERR_APP_INIT;
     }
-    xTimerStart( s_wdt_baudrate, 10 );
+//    xTimerStart( s_wdt_baudrate, 10 );
     xTimerStart( s_wdt_ticmode, 10 );
     return pdTRUE;
 }

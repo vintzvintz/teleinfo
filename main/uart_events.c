@@ -147,7 +147,7 @@ static void uart_detect_baudrate_task(void *pvParameters)
                 ESP_LOGE( TAG, "Baud rate actuel %"PRIu32" invalide", cur_baudrate);
         }
 
-        ESP_LOGI (TAG, "uart_set_baudrate() %"PRIu32" -> %"PRIu32, cur_baudrate, new_baudrate);
+        ESP_LOGI (TAG, "change baudrate %"PRIu32" -> %"PRIu32, cur_baudrate, new_baudrate);
         err = uart_set_baudrate (UART_TELEINFO_NUM, new_baudrate);
         if (err != ESP_OK)
         {
@@ -171,6 +171,7 @@ static void uart_rcv_task(void *pvParameters)
     tic_char_t *tmpbuf = NULL;
     int uart_err_cnt = 0;
     int length_read;
+    int baudrate, uart_period;
 
     tic_error_t err;
 
@@ -186,80 +187,91 @@ static void uart_rcv_task(void *pvParameters)
             }
         }
 
-        //Wait for UART events.
-        if(xQueueReceive(s_uart1_queue, (void *)&event, portMAX_DELAY)) {
-            //memset(dtmp, 0, RD_BUF_SIZE);
+        // baudrate avec plancher à 1200 pour éviter une division par 0
+        baudrate = get_baudrate();
+        baudrate = (baudrate > 0) ? baudrate : BAUD_RATE_MODE_HISTORIQUE;
 
-            switch(event.type) {
-                //Event of UART receving data
-                case UART_DATA:
-                    ESP_LOGD(TAG, "[UART DATA]: %d bytes", event.size);
-                    
-                    tmpbuf = calloc(1, event.size);   //  free() par le recepteur
-                    if (!tmpbuf)
-                    {
-                        ESP_LOGE (TAG, "calloc() failed");
-                        continue;
-                    }
+        // nb de Ticks pour recevoir TIC_UART_THRESOLD bytes (8 bits + stop + parity )
+        uart_period = ( TIC_UART_THRESOLD * (8+1+1) * 1000 / portTICK_PERIOD_MS ) / baudrate;
 
-                    length_read = uart_read_bytes(UART_TELEINFO_NUM, tmpbuf, event.size, portMAX_DELAY);
-                    err = decode_incoming_bytes (tmpbuf, length_read, get_tic_mode() );
-                    if( err != TIC_OK )
-                    {
-                        ESP_LOGE( TAG, "%d bytes perdus", length_read);
-                        free(tmpbuf);
-                        tmpbuf=NULL;
-                        continue;
-                    }
+        // Attend des events UART 
+        BaseType_t evt_received = xQueueReceive(s_uart1_queue, (void *)&event, 2*uart_period );
 
-                    // decremente le compteur d'erreur quand des données sont reçues
-                    if ( uart_err_cnt > 0 )
-                    {
-                        uart_err_cnt--;
-                    }
-                    else
-                    {   
-                        // met a jour le statut s'il n'y a plus d'erreurs
-                        // nb de Ticks pour recevoir 2 packets de TIC_UART_THRESOLD bytes (8 bits + stop + parity )
-                        int ticks_timeout = ( 2* TIC_UART_THRESOLD * (8+1+1) * 1000 /  portTICK_PERIOD_MS ) /get_baudrate();
-                        send_event_baudrate (get_baudrate(), ticks_timeout);
-                    }
-                    break;
-                //Event of HW FIFO overflow detected
-                case UART_FIFO_OVF:
-                    ESP_LOGI(TAG, "hw fifo overflow");
-                    // If fifo overflow happened, you should consider adding flow control for your application.
-                    // The ISR has already reset the rx FIFO,
-                    // As an example, we directly flush the rx buffer here in order to read more data.
-                    flush_uart();
-                    break;
-                //Event of UART ring buffer full
-                case UART_BUFFER_FULL:
-                    ESP_LOGI(TAG, "ring buffer full");
-                    // If buffer full happened, you should consider encreasing your buffer size
-                    // As an example, we directly flush the rx buffer here in order to read more data.
-                    flush_uart();
-                    break;
-                //Event of UART RX break detected
-                case UART_BREAK:
-                    //ESP_LOGI(TAG, "uart rx break");   
-                    uart_err_cnt++;                        // la teleinfo n'envoie pas de BREAK donc c'est une erreur
-                    break;
-                //Event of UART parity check error
-                case UART_PARITY_ERR:
-                    //ESP_LOGI(TAG, "uart parity error");
-                    uart_err_cnt++;
-                    break;
-                //Event of UART frame error
-                case UART_FRAME_ERR:
-                    //ESP_LOGI(TAG, "uart frame error");
-                    uart_err_cnt++;
-                    break;
-                //Others
-                default:
-                    ESP_LOGI(TAG, "uart event type: %d", event.type);
-                    break;
-            }
+        // timeout
+        if (!evt_received)
+        {
+            uart_err_cnt++;
+            send_event_baudrate( 0 );
+            continue;
+        }
+
+        switch(event.type) {
+            //Event of UART receving data
+            case UART_DATA:
+                ESP_LOGD(TAG, "[UART DATA]: %d bytes", event.size);
+                
+                tmpbuf = calloc(1, event.size);   //  free() par le recepteur
+                if (!tmpbuf)
+                {
+                    ESP_LOGE (TAG, "calloc() failed");
+                    continue;
+                }
+
+                length_read = uart_read_bytes(UART_TELEINFO_NUM, tmpbuf, event.size, portMAX_DELAY);
+                err = decode_incoming_bytes (tmpbuf, length_read, get_tic_mode() );
+                if( err != TIC_OK )
+                {
+                    ESP_LOGE( TAG, "%d bytes perdus", length_read);
+                    free(tmpbuf);
+                    tmpbuf=NULL;
+                    continue;
+                }
+
+                // decremente le compteur d'erreur quand des données sont reçues
+                if ( uart_err_cnt > 0 )
+                {
+                    uart_err_cnt--;
+                }
+                else
+                {   
+                    // met a jour le statut s'il n'y a plus d'erreurs
+                    send_event_baudrate ( get_baudrate() );
+                }
+                break;
+            //Event of HW FIFO overflow detected
+            case UART_FIFO_OVF:
+                ESP_LOGE(TAG, "hw fifo overflow");
+                // If fifo overflow happened, you should consider adding flow control for your application.
+                // The ISR has already reset the rx FIFO,
+                // As an example, we directly flush the rx buffer here in order to read more data.
+                flush_uart();
+                break;
+            //Event of UART ring buffer full
+            case UART_BUFFER_FULL:
+                ESP_LOGE(TAG, "ring buffer full");
+                // If buffer full happened, you should consider encreasing your buffer size
+                // As an example, we directly flush the rx buffer here in order to read more data.
+                flush_uart();
+                break;
+            //Event of UART RX break detected
+            case UART_BREAK:
+                ESP_LOGI(TAG, "uart rx break");   
+                uart_err_cnt++;                        // la teleinfo n'envoie pas de BREAK donc c'est une erreur
+                break;
+            //Event of UART parity check error
+            case UART_PARITY_ERR:
+                ESP_LOGI(TAG, "uart parity error");
+                uart_err_cnt++;
+                break;
+            //Event of UART frame error
+            case UART_FRAME_ERR:
+                ESP_LOGI(TAG, "uart frame error");
+                uart_err_cnt++;
+                break;
+            //Others
+            default:
+                ESP_LOGI(TAG, "uart event type: %d", event.type);
+                break;
         }
     }
     vTaskDelete(NULL);
