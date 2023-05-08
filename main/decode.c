@@ -249,9 +249,6 @@ static tic_error_t decode_frame_end( tic_decoder_t *td )
     //dataset_print( td->datasets );
     ESP_LOGD( TAG, "Trame de %"PRIi32" datasets reçue", dataset_count(td->datasets) );
 
-    // signale la réception correcte d'une trame
-    send_event_tic_mode( td->mode, 0 );
-
     //uint32_t nb = tic_dataset_count( td->datasets );
     //uint32_t size = tic_dataset_size( td->datasets );
     //ESP_LOGI( TAG, "Trame de %d datasets %d bytes (%p)", nb, size, td->datasets );
@@ -490,14 +487,6 @@ tic_error_t decode_incoming_bytes( tic_char_t *buf , size_t len, tic_mode_t mode
 // Create a task to decode teleinfo raw bytestream received from uart
 void tic_decode_task_start( )
 {
-    /*
-    tic_taskdecode_params_t *tic_task_params = malloc( sizeof(tic_taskdecode_params_t) );
-    if( tic_task_params == NULL )
-    {
-        ESP_LOGE( TAG, "malloc() failed" );
-        return;
-    }
-    */
 
     // transfere le flux de données brutes depuis l'UART vers le decodeur
     s_incoming_bytes = xQueueCreate (INCOMING_QUEUE_SIZE, sizeof(tic_bytes_t));

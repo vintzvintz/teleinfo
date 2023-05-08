@@ -19,8 +19,6 @@
 
 static const char *TAG = "event_loop.c";
 
-static TimerHandle_t s_wdt_ticmode = NULL;
-
 // Status event definitions 
 ESP_EVENT_DEFINE_BASE(STATUS_EVENTS);
 
@@ -54,35 +52,15 @@ static tic_error_t post_string (const char *str, int32_t evt_id)
     return TIC_OK;
 }
 
-static void tic_mode_timeout()
-{
-    ESP_LOGD (TAG, "watchdog status tic_mode expiré");
-    post_integer ( TIC_MODE_INCONNU, STATUS_EVENT_TIC_MODE);   // ignore erreur
-}
-
-static void reset_watchdog ( TimerHandle_t wdt, TickType_t next_before)
-{
-    if ( wdt != NULL )
-    {
-        if( next_before > 0 )
-        {
-            xTimerChangePeriod( wdt, next_before, 1 ); 
-        }
-        xTimerReset(wdt, 10);
-    }
-}
-
-
 tic_error_t send_event_baudrate (int baudrate)
 {
     ESP_LOGD (TAG, "status_update_baudrate(%d)", baudrate);
     return post_integer( baudrate, STATUS_EVENT_BAUDRATE );
 }
 
-tic_error_t send_event_tic_mode( tic_mode_t mode, TickType_t next_before)
+tic_error_t send_event_tic_mode( tic_mode_t mode)
 {
     ESP_LOGD (TAG, "status_update_tic_mode(%d)", mode);
-    reset_watchdog (s_wdt_ticmode, next_before);
     return post_integer ((int)mode, STATUS_EVENT_TIC_MODE);
 }
 
@@ -222,17 +200,5 @@ tic_error_t event_loop_init()
         return TIC_ERR_APP_INIT;   // message loggué par status_register_event_handler()
     }
 
-    s_wdt_ticmode = xTimerCreate( "decode_status_timer", 
-                                    TIC_DECODE_TIMEOUT / portTICK_PERIOD_MS,
-                                    pdFALSE,
-                                    NULL,
-                                    tic_mode_timeout );
-
-    if ( !s_wdt_ticmode)
-    {
-        ESP_LOGE (TAG, "xTimerCreate() failed");
-        return TIC_ERR_APP_INIT;
-    }
-    xTimerStart( s_wdt_ticmode, 10 );
     return pdTRUE;
 }

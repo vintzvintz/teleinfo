@@ -5,7 +5,8 @@
 #define MQTT_TOPIC_FORMAT "home/elec/%s"
 
 // ******************* Process ***********************
-#define TIC_PROCESS_TIMEOUT   30     // secondes
+// délai max entre deux trames correctes
+#define TIC_PROCESS_TIMEOUT_MS   3000
 
 
 // paramètres de l'application stockées en NVS (memoire flash)
@@ -15,9 +16,6 @@
 #define TIC_NVS_MQTT_PSK_ID   "mqtt_psk_id"
 #define TIC_NVS_MQTT_PSK_KEY  "mqtt_psk_key"
 
-//**************** Status *******************
-// délai max entre deux trames correctes
-#define TIC_DECODE_TIMEOUT     3000    // ms
 
 // **************** UART *****************
 // nombre de bytes à recevoir avant de lancer le traitement

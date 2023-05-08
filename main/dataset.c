@@ -17,19 +17,22 @@ static const char *TAG = "dataset.c";
 #define NUMERIQUE_TS (NUMERIQUE|TIC_DS_HAS_TIMESTAMP)
 #define IGNORE 0
 
-
-//  noms différents entre standard et historique
+// donnees en mode historique
 static const char *LABEL_ADCO   = "ADCO";
-static const char *LABEL_ADSC   = "ADSC";
-static const char *MISSING_ID = "_missing_id_";  // valeur par défaut si ADCO ou ADSC sont absents
-
 static const char *LABEL_BASE   = "BASE";
-static const char *LABEL_EAST   = "EAST";
-
 static const char *LABEL_PAPP   = "PAPP";
-static const char *LABEL_SINSTS = "SINSTS";
 
+// donnees en mode standard 
+static const char *LABEL_ADSC   = "ADSC";
+static const char *LABEL_EAST   = "EAST";
+static const char *LABEL_SINSTS = "SINSTS";
 static const char *LABEL_DATE   = "DATE";   // en mode standard uniquement
+static const char *LABEL_VTIC   = "VTIC";   // en mode standard uniquement
+
+static const char *TIC_V2       = "02";
+
+// identifiant compteur si ADCO ou ADSC sont absents
+static const char *MISSING_ID = "_missing_id_"; 
 
 
 static const flags_definition_t TIC_DATA_STANDARD[] = {
@@ -180,6 +183,14 @@ tic_error_t dataset_parse ( const dataset_t *ds, tic_data_t *data )
 
     char *strtol_end;
     tic_error_t err = TIC_OK;
+
+    // mode TIC ( par défaut historique sauf si label VTIC présent )
+    data->mode = TIC_MODE_HISTORIQUE;
+    const dataset_t* ds_vtic = dataset_find(ds, LABEL_VTIC);
+    if( ds_vtic && strncmp( ds_vtic->valeur, TIC_V2, sizeof(*TIC_V2) ) )
+    {
+        data->mode = TIC_MODE_STANDARD;
+    }
 
     // identifiant compteur
     const dataset_t* ds_id = dataset_find_deux( ds, LABEL_ADCO, LABEL_ADSC );

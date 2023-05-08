@@ -1,9 +1,27 @@
 #pragma once
 
-
-//#include "freertos/FreeRTOS.h"
 #include "esp_event.h"         // pour ESP_EVENT_DECLARE_BASE()
 
+
+// ***************** Modes TIC ******************
+typedef enum {
+    TIC_MODE_INCONNU = 0,
+    TIC_MODE_HISTORIQUE,
+    TIC_MODE_STANDARD,
+} tic_mode_t;
+
+
+// ***************** Status ******************
+ESP_EVENT_DECLARE_BASE(STATUS_EVENTS);         // declaration of the task events family
+enum {
+    STATUS_EVENT_NONE = 0,
+    STATUS_EVENT_BAUDRATE,
+    STATUS_EVENT_TIC_MODE,
+    STATUS_EVENT_CLOCK_TICK,
+    STATUS_EVENT_PUISSANCE,
+    STATUS_EVENT_WIFI,
+    STATUS_EVENT_MQTT,
+};
 
 
 //**************** datasets ****************
@@ -31,7 +49,7 @@ typedef struct flagdef_s {
 typedef char id_compteur_t[16];      // 12 caractères d'après la spec enedis
 
 typedef struct {
- //   tic_mode_t mode;                 // mode TIC déduit des labels présents
+    tic_mode_t mode;                 // mode TIC déduit des labels présents
     id_compteur_t id_compteur;
     int32_t index_energie;          // 9 car. valeur max 999 999 999 Wh -> int32 ok
     int32_t puissance_app;          // 5 car. valeur max 99 999 VA
@@ -91,24 +109,3 @@ typedef enum display_event_type_e {
     DISPLAY_EVENT_TYPE_MAX
 } display_event_type_t;
 
-
-// ***************** Status ******************
-
-typedef enum {
-    TIC_MODE_INCONNU = 0,
-    TIC_MODE_HISTORIQUE,
-    TIC_MODE_STANDARD,
-} tic_mode_t;
-
-
-ESP_EVENT_DECLARE_BASE(STATUS_EVENTS);         // declaration of the task events family
-
-enum {
-    STATUS_EVENT_NONE = 0,
-    STATUS_EVENT_BAUDRATE,
-    STATUS_EVENT_TIC_MODE,
-    STATUS_EVENT_CLOCK_TICK,
-    STATUS_EVENT_PUISSANCE,
-    STATUS_EVENT_WIFI,
-    STATUS_EVENT_MQTT,
-};

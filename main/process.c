@@ -21,8 +21,6 @@
 
 static const char *TAG = "process.c";
 
-#define TIC_LAST_POINTS_CNT  10
-
 static QueueHandle_t s_to_process = NULL;
 
 
@@ -188,6 +186,7 @@ static tic_error_t build_mqtt_msg( mqtt_msg_t *msg, dataset_t *ds, const tic_dat
 static tic_error_t traite_donnees( const tic_data_t *data )
 {
     // mise à jour afficheur oled, etc
+    send_event_tic_mode (data->mode);
     send_event_puissance (data->puissance_app); // ignore errors
 
     // envoie la trame au module de calcul de puissance active
@@ -215,10 +214,11 @@ static void process_task( void *pvParams )
         mqtt_msg_free( msg );        // libere les msg non-envoyés à mqtt_task
         msg=NULL;
 
-        BaseType_t ds_received = xQueueReceive( s_to_process, &ds, portMAX_DELAY );
+        BaseType_t ds_received = xQueueReceive( s_to_process, &ds, TIC_PROCESS_TIMEOUT_MS/portTICK_PERIOD_MS );
         if( ds_received != pdTRUE )
         {
-            ESP_LOGD( TAG, "Aucune trame téléinfo reçue depuis %d secondes", TIC_PROCESS_TIMEOUT );
+            send_event_tic_mode (TIC_MODE_INCONNU);
+            ESP_LOGD( TAG, "Aucune trame téléinfo reçue depuis %d ms", TIC_PROCESS_TIMEOUT_MS);
             continue;
         }
 
