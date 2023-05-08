@@ -101,34 +101,16 @@ tic_error_t send_event_clock( const char* time_str)
     return post_string (time_str, STATUS_EVENT_CLOCK_TICK);
 }
 
-void event_baudrate (int baudrate)
-{
-    ESP_LOGD( TAG, "STATUS_EVENT_BAUDRATE baudrate=%d", baudrate);
-}
 
-void event_tic_data ( const tic_data_t *data )
-{
-    ESP_LOGD( TAG, "STATUS_EVENT_TIC_DATA mode=%#02x", data->mode);
-}
+// ********************************************
+// Modèle pour les event_handlers
+// ********************************************
+static void event_baudrate (int baudrate) { ESP_LOGD( TAG, "STATUS_EVENT_BAUDRATE baudrate=%d", baudrate); }
+static void event_tic_data ( const tic_data_t *data ) { ESP_LOGD( TAG, "STATUS_EVENT_TIC_DATA mode=%#02x", data->mode); }
+static void event_clock_tick (const char *time_str) {  ESP_LOGV( TAG, "STATUS_EVENT_CLOCK_TICK %s", time_str); }
+static void event_wifi (const char *ssid) { ESP_LOGD( TAG, "STATUS_EVENT_WIFI ssid='%s'", ssid ); }
+static void event_mqtt( const char* status ) { ESP_LOGD( TAG, "STATUS_EVENT_MQTT %s", status); }
 
-
-static void event_clock_tick (const char *time_str)
-{
-  //  ESP_LOGD( TAG, "STATUS_EVENT_CLOCK_TICK %s", time_str);
-}
-
-static void event_wifi (const char *ssid)
-{
-    ESP_LOGD( TAG, "STATUS_EVENT_WIFI ssid='%s'", ssid );
-}
-
-
-static void event_mqtt( const char* status )
-{
-    ESP_LOGD( TAG, "STATUS_EVENT_MQTT %s", status);
-}
-
-// custom status event loop
 static void status_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data )
 {
     assert ( event_base==STATUS_EVENTS);
@@ -157,9 +139,7 @@ static void status_event_handler(void *event_handler_arg, esp_event_base_t event
 
 // enregistre un handler pour les STATUS_EVENT
 tic_error_t tic_register_event_handler (int32_t event_id, esp_event_handler_t handler_func, void* handler_arg
-                                          /*, esp_event_handler_instance_t* handler_ctx_arg */)
-
-{
+                                          /*, esp_event_handler_instance_t* handler_ctx_arg */) {
     esp_err_t err = esp_event_handler_instance_register_with( s_status_evt_loop, 
                                                             STATUS_EVENTS,
                                                             event_id,
@@ -184,7 +164,6 @@ tic_error_t event_loop_init()
         .task_name = "status_evt_loop_task", // task will be created
         .task_priority = uxTaskPriorityGet(NULL),
         .task_stack_size = 3072,
-        //.task_core_id = tskNO_AFFINITY
     };
 
     // Create the event loop
