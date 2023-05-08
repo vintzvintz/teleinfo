@@ -32,14 +32,14 @@ EventGroupHandle_t s_ticled_events = NULL;
 static void status_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data )
 {
     assert (event_base == STATUS_EVENTS);
-    assert (event_id == STATUS_EVENT_TIC_MODE );
+    assert (event_id == STATUS_EVENT_TIC_DATA );
     if( !s_ticled_events )
     {
         return;
     }
 
-    tic_mode_t mode = *(tic_mode_t *)event_data;
-    if ( mode != TIC_MODE_INCONNU )    // Trame complète decodée correctement
+    tic_data_t *data = (tic_data_t *)event_data;
+    if ( data && (data->mode != TIC_MODE_INCONNU) )    // Trame complète decodée correctement
     {
         xEventGroupSetBits( s_ticled_events, BIT_BLINK_LONG );
     } else {
@@ -100,7 +100,7 @@ tic_error_t ticled_task_start()
 
     // enregistre un handler pour reecevoir les notifications BAUDRATE et TIC_MODE
     tic_error_t err;
-    err = tic_register_event_handler (STATUS_EVENT_TIC_MODE, status_event_handler, NULL);
+    err = tic_register_event_handler (STATUS_EVENT_TIC_DATA, status_event_handler, NULL);
     if (err != TIC_OK)
     {
         ESP_LOGE( TAG, "status_register_event_handler()) erreur %#02x", err);

@@ -142,9 +142,8 @@ private:
     void status_event_handler( esp_event_base_t event_base, int32_t event_id, void *event_data );
     void update_tic_et_baudrate();
     void event_baudrate (int baudrate);
-    void event_tic_mode (tic_mode_t mode);
+    void event_tic_data (const tic_data_t *data );
     void event_clock_tick (const char *time_str);
-    void event_puissance (int puissance);
     void event_wifi (const char *ssid);
     void event_mqtt (const char* status);
     tic_error_t oled_update( display_event_type_t type, const char* txt );
@@ -321,11 +320,17 @@ void TicDisplay::event_baudrate (int baudrate)
 
 }
 
-void TicDisplay::event_tic_mode (tic_mode_t mode )
+void TicDisplay::event_tic_data (const tic_data_t *data )
 {
-    ESP_LOGD( TAG, "STATUS_EVENT_TIC_MODE mode=%#02x", mode);
-    m_mode = mode;
+    // mode tic
+    m_mode = data->mode;
+    ESP_LOGD( TAG, "STATUS_EVENT_TIC_DATA mode=%#02x papp=%" PRIu32, m_mode, data->puissance_app);
     update_tic_et_baudrate();
+
+    // puissance
+    char buf[16];
+    snprintf( buf, sizeof(buf), "%" PRIu32" W", data->puissance_app );
+    oled_update( DISPLAY_PAPP, buf );
 }
 
 void TicDisplay::event_clock_tick (const char *time_str)
@@ -334,13 +339,6 @@ void TicDisplay::event_clock_tick (const char *time_str)
     oled_update( DISPLAY_CLOCK, time_str);
 }
 
-void TicDisplay::event_puissance (int puissance)
-{
-    ESP_LOGD( TAG, "STATUS_EVENT_PUISSANCE %d", puissance);
-    char buf[16];
-    snprintf( buf, sizeof(buf), "%d W", puissance );
-    oled_update( DISPLAY_PAPP, buf );
-}
 
 void TicDisplay::event_wifi (const char *ssid)
 {
@@ -408,14 +406,11 @@ void TicDisplay::status_event_handler( esp_event_base_t event_base, int32_t even
         case STATUS_EVENT_BAUDRATE:
             event_baudrate (*(int*)event_data);
             break;
-        case STATUS_EVENT_TIC_MODE:
-            event_tic_mode (*(tic_mode_t *)event_data);
+        case STATUS_EVENT_TIC_DATA:
+            event_tic_data ((const tic_data_t *)event_data);
             break;
         case STATUS_EVENT_CLOCK_TICK:
             event_clock_tick ((const char *)event_data);
-            break;
-        case STATUS_EVENT_PUISSANCE :
-            event_puissance (*(int *)event_data);
             break;
         case STATUS_EVENT_WIFI:
             event_wifi ((const char *)event_data);

@@ -15,11 +15,11 @@ tic_error_t tic_register_event_handler (int32_t event_id, esp_event_handler_t ha
 
 // raccourcis pour poster des évènements
 tic_error_t send_event_baudrate (int baudrate);
-tic_error_t send_event_tic_mode (tic_mode_t mode);
+tic_error_t send_event_tic_data (const tic_data_t *data);
 tic_error_t send_event_wifi (const char* ssid);
 tic_error_t send_event_mqtt (const char *mqtt_status);
 tic_error_t send_event_clock (const char* time_str);
-tic_error_t send_event_puissance (uint32_t papp);
+
 
 #ifdef __cplusplus
 }       // extern "C" 

@@ -52,16 +52,35 @@ static tic_error_t post_string (const char *str, int32_t evt_id)
     return TIC_OK;
 }
 
+static tic_error_t post_tic_data (const tic_data_t *data, int32_t evt_id)
+{
+    esp_err_t err = esp_event_post_to (s_status_evt_loop,
+            STATUS_EVENTS, evt_id, 
+            data, sizeof(*data), 
+            portMAX_DELAY);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE( TAG, "esp_event_post_to( <tic_data> ) erreur %#02x", err);
+        return TIC_ERR;
+    }
+    return TIC_OK;
+}
+
 tic_error_t send_event_baudrate (int baudrate)
 {
     ESP_LOGD (TAG, "status_update_baudrate(%d)", baudrate);
     return post_integer( baudrate, STATUS_EVENT_BAUDRATE );
 }
 
-tic_error_t send_event_tic_mode( tic_mode_t mode)
+tic_error_t send_event_tic_data( const tic_data_t *data)
 {
-    ESP_LOGD (TAG, "status_update_tic_mode(%d)", mode);
-    return post_integer ((int)mode, STATUS_EVENT_TIC_MODE);
+    if( !data )
+    {
+        ESP_LOGE( TAG, "send_event_tic_data() recoit NULL");
+        return TIC_ERR_BAD_DATA;
+    }
+    ESP_LOGD (TAG, "send_event_tic_data() mode %d", data->mode );
+    return post_tic_data (data, STATUS_EVENT_TIC_DATA);
 }
 
 tic_error_t send_event_wifi (const char* ssid)
@@ -82,35 +101,21 @@ tic_error_t send_event_clock( const char* time_str)
     return post_string (time_str, STATUS_EVENT_CLOCK_TICK);
 }
 
-tic_error_t send_event_puissance( uint32_t puissance )
-{
-    ESP_LOGD (TAG, "status_update_puissance( %"PRIu32" )", puissance);
-    return post_integer (puissance, STATUS_EVENT_PUISSANCE);
-}
-
-
-
 void event_baudrate (int baudrate)
 {
     ESP_LOGD( TAG, "STATUS_EVENT_BAUDRATE baudrate=%d", baudrate);
 }
 
-void event_tic_mode (tic_mode_t mode )
+void event_tic_data ( const tic_data_t *data )
 {
-    ESP_LOGD( TAG, "STATUS_EVENT_TIC_MODE mode=%#02x", mode);
+    ESP_LOGD( TAG, "STATUS_EVENT_TIC_DATA mode=%#02x", data->mode);
 }
+
 
 static void event_clock_tick (const char *time_str)
 {
   //  ESP_LOGD( TAG, "STATUS_EVENT_CLOCK_TICK %s", time_str);
 }
-
-
-static void event_puissance (int puissance)
-{
-    ESP_LOGD( TAG, "STATUS_EVENT_PUISSANCE %d", puissance);
-}
-
 
 static void event_wifi (const char *ssid)
 {
@@ -132,14 +137,11 @@ static void status_event_handler(void *event_handler_arg, esp_event_base_t event
         case STATUS_EVENT_BAUDRATE:
             event_baudrate (*(int*)event_data);
             break;
-        case STATUS_EVENT_TIC_MODE:
-            event_tic_mode (*(tic_mode_t *)event_data);
+        case STATUS_EVENT_TIC_DATA:
+            event_tic_data ((tic_data_t *)event_data);
             break;
         case STATUS_EVENT_CLOCK_TICK:
             event_clock_tick ((const char *)event_data);
-            break;
-        case STATUS_EVENT_PUISSANCE :
-            event_puissance (*(int *)event_data);
             break;
         case STATUS_EVENT_WIFI:
             event_wifi ((const char *)event_data);

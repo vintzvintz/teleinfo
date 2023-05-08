@@ -186,15 +186,18 @@ static tic_error_t build_mqtt_msg( mqtt_msg_t *msg, dataset_t *ds, const tic_dat
 static tic_error_t traite_donnees( const tic_data_t *data )
 {
     // mise à jour afficheur oled, etc
-    send_event_tic_mode (data->mode);
-    send_event_puissance (data->puissance_app); // ignore errors
+    send_event_tic_data (data);
 
     // envoie la trame au module de calcul de puissance active
+    // TODO : passer par l'event loop
     puissance_incoming_data( data );     // ignore erreurs
 
     return TIC_OK;
 }
 
+
+// Pour envoyer un event avec absence de trames valides
+static const tic_data_t null_data = {0};
 
 static void process_task( void *pvParams )
 {
@@ -217,7 +220,7 @@ static void process_task( void *pvParams )
         BaseType_t ds_received = xQueueReceive( s_to_process, &ds, TIC_PROCESS_TIMEOUT_MS/portTICK_PERIOD_MS );
         if( ds_received != pdTRUE )
         {
-            send_event_tic_mode (TIC_MODE_INCONNU);
+            send_event_tic_data ( &null_data);
             ESP_LOGD( TAG, "Aucune trame téléinfo reçue depuis %d ms", TIC_PROCESS_TIMEOUT_MS);
             continue;
         }
@@ -242,7 +245,7 @@ static void process_task( void *pvParams )
         if(err != TIC_OK)
         {
             ESP_LOGE (TAG, "build_mqtt_msg() erreur %d", err);
-            continue;    // erreur logguee dans build_mqtt_msg()
+            continue;
         }
 
         // envoie le message à mqtt_task
