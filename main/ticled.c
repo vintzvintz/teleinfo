@@ -18,41 +18,32 @@ static const char *TAG = "ticled.c";
 #define LED_GPIO     CONFIG_TIC_LED_GPIO    // GPIO_NUM_3
 
 // Durée des clingotements
-#define BLINK_COURT_ON    250         // ms
-#define BLINK_COURT_OFF   100         // ms
+#define BLINK_COURT_ON    200         // ms
+#define BLINK_COURT_OFF   200         // ms
 #define BLINK_LONG_ON     2000        // ms
-#define BLINK_LONG_OFF    1000        // ms
+#define BLINK_LONG_OFF    2000        // ms
 
 // Contrôle de la led du PtiInfo avec un EventGroup
 EventGroupHandle_t s_ticled_events = NULL;
-#define BIT_BLINK_COURT    ( 1 << 0 )
+//#define BIT_BLINK_COURT    ( 1 << 0 )
 #define BIT_BLINK_LONG     ( 1 << 1 )
-
-
-static void ticled_blink( const EventBits_t bits ) 
-{
-    if( s_ticled_events == NULL )
-    {
-        ESP_LOGD( TAG, "s_ticled_events pas initialisé" );
-        return;
-    }
-    xEventGroupSetBits( s_ticled_events, bits );
-}
 
 
 static void status_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data )
 {
     assert (event_base == STATUS_EVENTS);
-    switch (event_id)
+    assert (event_id == STATUS_EVENT_TIC_MODE );
+    if( !s_ticled_events )
     {
-        case STATUS_EVENT_BAUDRATE:    // Donnees reçues par l'UART
-            ticled_blink( BIT_BLINK_COURT );
-            break;
-        case STATUS_EVENT_TIC_MODE:    // Trame complète decodée correctement
-            ticled_blink( BIT_BLINK_LONG );
-            break;
-        // default:
-            // ignore autres evènements
+        return;
+    }
+
+    tic_mode_t mode = *(tic_mode_t *)event_data;
+    if ( mode != TIC_MODE_INCONNU )    // Trame complète decodée correctement
+    {
+        xEventGroupSetBits( s_ticled_events, BIT_BLINK_LONG );
+    } else {
+        xEventGroupClearBits( s_ticled_events, BIT_BLINK_LONG );
     }
 }
 
@@ -61,17 +52,11 @@ static void ticled_task( void *pvParams )
 {
     for(;;)
     {
-        EventBits_t uxBits = xEventGroupWaitBits(
-                    s_ticled_events,
-                    (BIT_BLINK_COURT | BIT_BLINK_LONG),              // The bits within the event group to wait for.
-                    pdTRUE,         // BITs should be cleared before returning.
-                    pdFALSE,        // Don't wait for both bits, either bit will do.
-                    portMAX_DELAY ); // Wait a max
-
         //  allume la led
         gpio_set_level( LED_GPIO, 1 );
 
         // clignote long ou court
+        EventBits_t uxBits = xEventGroupGetBits( s_ticled_events );
         if( ( uxBits & BIT_BLINK_LONG) != 0 )
         {
             ESP_LOGD( TAG, "long blink" );
@@ -79,7 +64,7 @@ static void ticled_task( void *pvParams )
             gpio_set_level( LED_GPIO, 0 );
             vTaskDelay( BLINK_LONG_OFF/ portTICK_PERIOD_MS );
         }
-        else if( ( uxBits & BIT_BLINK_COURT ) != 0 )
+        else
         {
             ESP_LOGD( TAG, "short blink" );
             vTaskDelay( BLINK_COURT_ON / portTICK_PERIOD_MS );
@@ -115,7 +100,7 @@ tic_error_t ticled_task_start()
 
     // enregistre un handler pour reecevoir les notifications BAUDRATE et TIC_MODE
     tic_error_t err;
-    err = tic_register_event_handler (ESP_EVENT_ANY_ID, status_event_handler, NULL);
+    err = tic_register_event_handler (STATUS_EVENT_TIC_MODE, status_event_handler, NULL);
     if (err != TIC_OK)
     {
         ESP_LOGE( TAG, "status_register_event_handler()) erreur %#02x", err);

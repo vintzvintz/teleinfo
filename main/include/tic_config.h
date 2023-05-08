@@ -17,7 +17,7 @@
 
 //**************** Status *******************
 // délai max entre deux trames correctes
-#define STATUS_TICMODE_DEFAUT_TIMEOUT     2000    // ms
+#define TIC_DECODE_TIMEOUT     3000    // ms
 
 // **************** UART *****************
 // nombre de bytes à recevoir avant de lancer le traitement
