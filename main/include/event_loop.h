@@ -18,8 +18,8 @@ tic_error_t send_event_baudrate (int baudrate);
 tic_error_t send_event_tic_data (const tic_data_t *data);
 tic_error_t send_event_wifi (const char* ssid);
 tic_error_t send_event_mqtt (const char *mqtt_status);
-tic_error_t send_event_clock (const char* time_str);
-
+tic_error_t send_event_clock_tick ( );
+tic_error_t send_event_sntp (int is_sync);
 
 #ifdef __cplusplus
 }       // extern "C" 

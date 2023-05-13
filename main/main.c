@@ -33,7 +33,7 @@
 
 
 
-#define TZSTRING_CET         "CET-1CEST,M3.5.0/2,M10.5.0/3"    // [Europe/Paris]
+#define TZSTRING_CET "CET-1CEST,M3.5.0/2,M10.5.0/3"    // [Europe/Paris]
 
 
 static const char *TAG = "main_app";
@@ -49,12 +49,11 @@ void nvs_initialise(void)
     ESP_ERROR_CHECK(ret);
 }
 
-
 void app_main(void)
 {
     esp_log_level_set("*", ESP_LOG_INFO);
 
-    esp_log_level_set("cmd_tic.c", ESP_LOG_DEBUG);
+//    esp_log_level_set("cmd_tic.c", ESP_LOG_DEBUG);
 //    esp_log_level_set("wifi.c", ESP_LOG_WARN);
  //   esp_log_level_set("process.c",ESP_LOG_INFO);
  //   esp_log_level_set("mqtt.c",ESP_LOG_DEBUG);
@@ -62,13 +61,13 @@ void app_main(void)
  //   esp_log_level_set("wifi_init", ESP_LOG_WARN);
  //   esp_log_level_set("uart_events.c", ESP_LOG_DEBUG);
   //  esp_log_level_set("event_loop.c", ESP_LOG_DEBUG);
-    esp_log_level_set("status.cpp", ESP_LOG_DEBUG);
+//    esp_log_level_set("status.cpp", ESP_LOG_DEBUG);
  //   esp_log_level_set("decode.c", ESP_LOG_WARN);
   //  esp_log_level_set("ticled.c", ESP_LOG_DEBUG);
     //esp_log_level_set("dataset.c", ESP_LOG_DEBUG);
 //    esp_log_level_set("process.c", ESP_LOG_DEBUG);
     //esp_log_level_set("puissance.c", ESP_LOG_DEBUG);
-  //  esp_log_level_set("oled.cpp", ESP_LOG_DEBUG);
+    //esp_log_level_set("oled.cpp", ESP_LOG_DEBUG);
 
 
     ESP_LOGI(TAG, "[APP] Startup..");
@@ -77,7 +76,7 @@ void app_main(void)
 
     event_loop_init();
 
-    // non volatile storage utilisé pour
+    // Non Volatile Storage utilisé pour
     //   - wifi driver
     //   - phy calibration data
     //   - wifi credentials
@@ -93,7 +92,7 @@ void app_main(void)
 #endif
 
 #ifdef CONFIG_TIC_SNTP
-    clock_task_start();
+    sntp_client_initialise();
     setenv( "TZ", TZSTRING_CET, 1);
     tzset();
 #endif
@@ -109,9 +108,5 @@ void app_main(void)
     tic_decode_task_start();
     process_task_start();
     mqtt_task_start( 0 );   // 0=lance le client mqtt   1=dummy/debug
-
-
-
-
 }
 

@@ -29,13 +29,13 @@ static const char *TAG = "clock.c";
 
 TimerHandle_t s_clock_wdt = NULL;
 
-#define SYNC_CLOCK_BIT       BIT0
 #define MAX_MISSED_RESYNC    5
 
 
 void clock_lost()
 {
     ESP_LOGW( TAG, "SNTP sync is lost" );
+    send_event_sntp( 0 );
 }
 
 
@@ -54,38 +54,17 @@ void sntp_callback( struct timeval *tv )
         xTimerReset( s_clock_wdt, 10 );   // ignore errors
         TickType_t t = xTimerGetPeriod (s_clock_wdt);
         ESP_LOGD( TAG, "Reset sntp watchdog to %lu seconds", (1000* t / portTICK_PERIOD_MS) );
+        send_event_sntp( 1 );
     }
 }
 
-
-
-// TODO -> déplacer dans oled.cpp  ?
-void clock_task( void *pvParams )
+void clock_tick_callback( )
 {
-    time_t now;
-    struct tm timeinfo;
-    char buf[20];
-    for(;;)
-    {
-        if ( xTimerIsTimerActive (s_clock_wdt) )
-        {
-            // synchronised
-            now = time(NULL);
-            localtime_r( &now, &timeinfo );
-            strftime( buf, sizeof(buf), "%H:%M:%S", &timeinfo );
-            send_event_clock( buf );
-        }
-        else
-        {
-            // not synchronised
-            send_event_clock( "no sntp" );
-        }
-        vTaskDelay( 1000 / portTICK_PERIOD_MS );
-    }
+  send_event_clock_tick();  // ignore errors
 }
 
 
-tic_error_t clock_task_start()
+tic_error_t sntp_client_initialise()
 {
     ESP_LOGD( TAG, "clock_task_start()");
 
@@ -104,13 +83,16 @@ tic_error_t clock_task_start()
         return TIC_ERR_APP_INIT;
     }
 
-    // create clock client task
-    BaseType_t task_created = xTaskCreate( clock_task, "clock_task", 4096, NULL, 10, NULL);
-    if( task_created != pdPASS )
+    // timer qui envoie des STATUS_EVENT_CLOCK_TICK toutes les secondes
+    TimerHandle_t t;
+    t = xTimerCreate( "clock_tick", 1000/portTICK_PERIOD_MS, pdTRUE, NULL, clock_tick_callback );
+    if( !t )
     {
-        ESP_LOGE( TAG, "xTaskCreate() failed");
-        return TIC_ERR_APP_INIT;
+      ESP_LOGE( TAG, "xTimerCreate() failed" );
+      return TIC_ERR_APP_INIT;
     }
+    xTimerStart(t,10);
+
     return TIC_OK;
 }
 

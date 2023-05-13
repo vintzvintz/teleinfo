@@ -94,11 +94,18 @@ tic_error_t send_event_mqtt (const char *mqtt_status)
     return post_string (mqtt_status, STATUS_EVENT_MQTT);
 }
 
-tic_error_t send_event_clock( const char* time_str)
+tic_error_t send_event_clock_tick( )
 {
-  //  ESP_LOGD (TAG, "status_update_mqtt(%s)", time_str);
-    return post_string (time_str, STATUS_EVENT_CLOCK_TICK);
+  //  ESP_LOGD (TAG, "send_event_clock_tick()" );
+    return post_integer( 0, STATUS_EVENT_CLOCK_TICK );
 }
+
+tic_error_t send_event_sntp( int is_sync )
+{
+    ESP_LOGD (TAG, "send_event_sntp(%d)", is_sync);
+    return post_integer (is_sync, STATUS_EVENT_SNTP);
+}
+
 
 
 // ********************************************
@@ -106,9 +113,11 @@ tic_error_t send_event_clock( const char* time_str)
 // ********************************************
 static void event_baudrate (int baudrate) { ESP_LOGD( TAG, "STATUS_EVENT_BAUDRATE baudrate=%d", baudrate); }
 static void event_tic_data ( const tic_data_t *data ) { ESP_LOGD( TAG, "STATUS_EVENT_TIC_DATA mode=%#02x", data->mode); }
-static void event_clock_tick (const char *time_str) {  ESP_LOGV( TAG, "STATUS_EVENT_CLOCK_TICK %s", time_str); }
-static void event_wifi (const char *ssid) { ESP_LOGD( TAG, "STATUS_EVENT_WIFI ssid='%s'", ssid ); }
-static void event_mqtt( const char* status ) { ESP_LOGD( TAG, "STATUS_EVENT_MQTT %s", status); }
+static void event_clock_tick () {  ESP_LOGV( TAG, "STATUS_EVENT_CLOCK_TICK"); }
+static void event_sntp ( int is_sync ) { ESP_LOGD( TAG, "STATUS_EVENT_SNTP %d", is_sync ); }
+static void event_wifi ( const char *ssid ) { ESP_LOGD( TAG, "STATUS_EVENT_WIFI ssid='%s'", ssid ); }
+static void event_mqtt ( const char* status ) { ESP_LOGD( TAG, "STATUS_EVENT_MQTT %s", status); }
+
 
 static void status_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data )
 {
@@ -116,13 +125,16 @@ static void status_event_handler(void *event_handler_arg, esp_event_base_t event
     switch( event_id )
     {
         case STATUS_EVENT_BAUDRATE:
-            event_baudrate (*(int*)event_data);
+            event_baudrate (*(int *)event_data);
             break;
         case STATUS_EVENT_TIC_DATA:
             event_tic_data ((tic_data_t *)event_data);
             break;
+        case STATUS_EVENT_SNTP:
+            event_sntp (*(int *)event_data);
+            break;
         case STATUS_EVENT_CLOCK_TICK:
-            event_clock_tick ((const char *)event_data);
+            event_clock_tick ();
             break;
         case STATUS_EVENT_WIFI:
             event_wifi ((const char *)event_data);

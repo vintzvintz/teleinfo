@@ -1,3 +1,4 @@
+#include <time.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -123,6 +124,11 @@ private:
     //    le traitement des events par la librairie lcdgfx -> tâche oled_task
     QueueHandle_t m_queue;
 
+    portMUX_TYPE m_sntp_spinlock;
+    int m_sntp_sync;
+    int get_sntp_sync();
+    void set_sntp_sync(int is_sync);
+
     // pour affichage combiné baudrate/mode sur une seule ligne
     tic_mode_t m_mode;
     int m_baudrate;      // 0:inconnu;   1200:historique;   9600:standard
@@ -143,7 +149,8 @@ private:
     void update_tic_et_baudrate();
     void event_baudrate (int baudrate);
     void event_tic_data (const tic_data_t *data );
-    void event_clock_tick (const char *time_str);
+    void event_clock_tick ();
+    void event_sntp ( int is_sync );
     void event_wifi (const char *ssid);
     void event_mqtt (const char* status);
     tic_error_t oled_update( display_event_type_t type, const char* txt );
@@ -174,6 +181,24 @@ TicDisplay::TicDisplay( int8_t rstPin, const SPlatformI2cConfig &config )
     m_lines[DISPLAY_MESSAGE] = new DisplayLine( LABEL_MESSAGE, i++, w  );
 
     assert(i==DISPLAY_EVENT_TYPE_MAX);    //  nombre de DisplayLines incorrect
+}
+
+
+int TicDisplay::get_sntp_sync( void )
+{
+    int ret;
+    taskENTER_CRITICAL( &m_sntp_spinlock );
+    ret = m_sntp_sync;
+    taskEXIT_CRITICAL( &m_sntp_spinlock );
+    return ret;
+}
+
+
+void TicDisplay::set_sntp_sync( int is_sync )
+{
+    taskENTER_CRITICAL( &m_sntp_spinlock );
+    m_sntp_sync = is_sync;
+    taskEXIT_CRITICAL( &m_sntp_spinlock );
 }
 
 
@@ -333,10 +358,26 @@ void TicDisplay::event_tic_data (const tic_data_t *data )
     oled_update( DISPLAY_PAPP, buf );
 }
 
-void TicDisplay::event_clock_tick (const char *time_str)
+void TicDisplay::event_clock_tick ( )
 {
-    ESP_LOGD( TAG, "STATUS_EVENT_CLOCK_TICK %s", time_str);
-    oled_update( DISPLAY_CLOCK, time_str);
+    ESP_LOGD( TAG, "STATUS_EVENT_CLOCK_TICK" );
+
+    time_t now;
+    struct tm timeinfo;
+    char buf[20];
+    if ( get_sntp_sync() )
+    {
+        // synchronised
+        now = time(NULL);
+        localtime_r( &now, &timeinfo );
+        strftime( buf, sizeof(buf), "%H:%M:%S", &timeinfo );
+        oled_update( DISPLAY_CLOCK, buf );
+    }
+    else
+    {
+        // not synchronised
+        oled_update( DISPLAY_CLOCK, "no sntp" );
+    }
 }
 
 
@@ -353,6 +394,12 @@ void TicDisplay::event_mqtt( const char* status )
     oled_update( DISPLAY_MQTT_STATUS, status );
 }
 
+
+void TicDisplay::event_sntp ( int is_sync )
+{
+    ESP_LOGD( TAG, "STATUS_EVENT_SNTP %d", is_sync);
+    set_sntp_sync( is_sync );
+}
 
 /*
 
@@ -376,28 +423,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 }
 */
 
-
-/*
-void status_wifi_sta_connecting()
-{
-    oled_update( DISPLAY_WIFI_STATUS, STATUS_CONNECTING );
-
-    // disbale upper layers 
-    //status_wifi_lost_ip();   // clear oled_ip et oled_mqtt
-}
-
-
-void status_wifi_sta_connected( const char *ssid )
-{
-    const char *txt = ( ssid == NULL ) ? STATUS_CONNECTED : ssid;
-    oled_update( DISPLAY_WIFI_STATUS, txt );
-    //status_wifi_lost_ip();   // clear oled_ip et oled_mqtt
-}
-
-*/
-
-
-
 void TicDisplay::status_event_handler( esp_event_base_t event_base, int32_t event_id, void *event_data )
 {
     assert ( event_base==STATUS_EVENTS);
@@ -410,7 +435,10 @@ void TicDisplay::status_event_handler( esp_event_base_t event_base, int32_t even
             event_tic_data ((const tic_data_t *)event_data);
             break;
         case STATUS_EVENT_CLOCK_TICK:
-            event_clock_tick ((const char *)event_data);
+            event_clock_tick ( );
+            break;
+        case STATUS_EVENT_SNTP:
+            event_sntp (*(int*)event_data);
             break;
         case STATUS_EVENT_WIFI:
             event_wifi ((const char *)event_data);
@@ -436,10 +464,10 @@ void TicDisplay::ip_event_handler( esp_event_base_t event_base, int32_t event_id
         char buf[32];
         snprintf( buf, sizeof(buf), IPSTR, IP2STR( &(event->ip_info.ip) ) );
         oled_update( DISPLAY_IP_ADDR, buf );
-        ESP_LOGI(TAG, "Got IP %s", buf);
+        ESP_LOGD(TAG, "Got IP %s", buf);
         break;
     case IP_EVENT_STA_LOST_IP:              // !< station lost IP and the IP is reset to 0
-        ESP_LOGI(TAG, "IP_EVENT_LOST_IP");
+        ESP_LOGD(TAG, "IP_EVENT_LOST_IP");
         oled_update( DISPLAY_IP_ADDR, "" );
         break;
     default:
@@ -469,8 +497,17 @@ void TicDisplay::static_status_event_handler(void *arg, esp_event_base_t event_b
 static void oled_task(void *pvParams)
 {
     TicDisplay display( OLED_GPIO_RST, tic_default_display_config );
-    display.setup();
-    display.loop();
+    tic_error_t err;
+    err = display.setup();
+    if ( err == TIC_OK )
+    {
+        display.loop();
+        ESP_LOGE( TAG, "fatal: TicDisplay::loop() exited");
+    }
+    else
+    {
+        ESP_LOGE( TAG, "fatal: TicDisplay::setup() failed");
+    }
 }
 
 

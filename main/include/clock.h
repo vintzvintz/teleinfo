@@ -2,4 +2,4 @@
 
 #include "tic_types.h"
 
-tic_error_t clock_task_start();
+tic_error_t sntp_client_initialise();
