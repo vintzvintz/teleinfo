@@ -35,9 +35,6 @@ static esp_mqtt_client_config_t s_mqtt_cfg = {
         .broker.verification.psk_hint_key = &s_psk_hint_key
 };
 
-
-static tic_error_t update_mqtt_config (esp_mqtt_client_config_t *cfg);
-
 static void log_error_if_nonzero(const char *message, int error_code)
 {
     if (error_code != 0) {
@@ -167,6 +164,69 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     }
 }
 
+
+static void log_mqtt_cfg( const esp_mqtt_client_config_t *cfg )
+{
+    ESP_LOGD( TAG, "mqtt_broker_uri: %s", 
+        (cfg->broker.address.uri ? cfg->broker.address.uri : "NULL") );
+    ESP_LOGD( TAG, "mqtt_psk_identity: %s", 
+        (cfg->broker.verification.psk_hint_key->hint ? cfg->broker.verification.psk_hint_key->hint : "NULL") );
+    ESP_LOGD( TAG, "mqtt_psk_key_size: %d", cfg->broker.verification.psk_hint_key->key_size );
+    for( int i=0;  i < cfg->broker.verification.psk_hint_key->key_size; i++ )
+    {
+        ESP_LOGD( TAG, "mqtt_psk_key[%d]: %#x", i, cfg->broker.verification.psk_hint_key->key[i] );
+    }
+}
+
+
+static tic_error_t get_mqtt_config_from_nvs (esp_mqtt_client_config_t *cfg)
+{
+    tic_error_t err;
+    struct address_t *addr = &(s_mqtt_cfg.broker.address);
+    struct psk_key_hint *hint_key = (struct psk_key_hint *)(cfg->broker.verification.psk_hint_key);
+
+    // URI du broker MQTT
+    if(addr->uri)
+    {
+        free((void*)(addr->uri));    // cast en void* pour éviter un warning sur type (const char*)
+        addr->uri = NULL;
+    }
+    err = console_nvs_get_string( TIC_NVS_MQTT_BROKER, (char **)(&(addr->uri)) );
+    if (err != TIC_OK)
+    {
+        ESP_LOGE (TAG, "URI du broker MQTT non configurée");
+        return err;
+    }
+
+    // preshared key
+    if (hint_key->hint)
+    {
+        free((void*)(hint_key->hint));
+        hint_key->hint = NULL;
+    }
+    err = console_nvs_get_string( TIC_NVS_MQTT_PSK_ID, (char **)(&(hint_key->hint)) );
+    if (err != TIC_OK)
+    {
+        ESP_LOGE (TAG, "Identité de la clé PSK non configurée");
+        return err;
+    }
+
+    if (hint_key->key)
+    {
+        free((void*)(hint_key->key));
+        hint_key->key = NULL;
+    }
+    err = console_nvs_get_blob( TIC_NVS_MQTT_PSK_KEY, (char **)(&(hint_key->key)), (size_t *)(&(hint_key->key_size)) );
+    if (err != TIC_OK)
+    {
+        ESP_LOGE (TAG, "Valeur de la clé PSK non configurée");
+        return err;
+    }
+    log_mqtt_cfg (cfg);
+    return TIC_OK;
+}
+
+
 // initialise le client MQTT au lancement et lorsque les parametres changent
 static void mqtt_client_task( void *pvParams )
 {
@@ -180,7 +240,7 @@ static void mqtt_client_task( void *pvParams )
         /*EventBits_t bits = */ xEventGroupWaitBits(s_client_evt_group, (BIT_CLIENT_RESTART), pdTRUE, pdFALSE, portMAX_DELAY);
 
         // recupère les parametres de connexion dans le NVS
-        tic_err = update_mqtt_config (&s_mqtt_cfg);
+        tic_err = get_mqtt_config_from_nvs (&s_mqtt_cfg);
         if (tic_err != TIC_OK)
         {
             // inutile de continuer si les paramètres sont incorrects
@@ -272,67 +332,6 @@ static void mqtt_publish_task( void *pvParams )
     vTaskDelete(NULL);
 }
 
-
-static void log_mqtt_cfg( const esp_mqtt_client_config_t *cfg )
-{
-    ESP_LOGD( TAG, "mqtt_broker_uri: %s", 
-        (cfg->broker.address.uri ? cfg->broker.address.uri : "NULL") );
-    ESP_LOGD( TAG, "mqtt_psk_identity: %s", 
-        (cfg->broker.verification.psk_hint_key->hint ? cfg->broker.verification.psk_hint_key->hint : "NULL") );
-    ESP_LOGD( TAG, "mqtt_psk_key_size: %d", cfg->broker.verification.psk_hint_key->key_size );
-    for( int i=0;  i < cfg->broker.verification.psk_hint_key->key_size; i++ )
-    {
-        ESP_LOGD( TAG, "mqtt_psk_key[%d]: %#x", i, cfg->broker.verification.psk_hint_key->key[i] );
-    }
-}
-
-
-static tic_error_t update_mqtt_config (esp_mqtt_client_config_t *cfg)
-{
-    tic_error_t err;
-    struct address_t *addr = &(s_mqtt_cfg.broker.address);
-    struct psk_key_hint *hint_key = (struct psk_key_hint *)(cfg->broker.verification.psk_hint_key);
-
-    // URI du broker MQTT
-    if(addr->uri)
-    {
-        free((void*)(addr->uri));    // cast en void* pour éviter un warning sur type (const char*)
-        addr->uri = NULL;
-    }
-    err = console_nvs_get_string( TIC_NVS_MQTT_BROKER, (char **)(&(addr->uri)) );
-    if (err != TIC_OK)
-    {
-        ESP_LOGE (TAG, "URI du broker MQTT non configurée");
-        return err;
-    }
-
-    // preshared key
-    if (hint_key->hint)
-    {
-        free((void*)(hint_key->hint));
-        hint_key->hint = NULL;
-    }
-    err = console_nvs_get_string( TIC_NVS_MQTT_PSK_ID, (char **)(&(hint_key->hint)) );
-    if (err != TIC_OK)
-    {
-        ESP_LOGE (TAG, "Identité de la clé PSK non configurée");
-        return err;
-    }
-
-    if (hint_key->key)
-    {
-        free((void*)(hint_key->key));
-        hint_key->key = NULL;
-    }
-    err = console_nvs_get_blob( TIC_NVS_MQTT_PSK_KEY, (char **)(&(hint_key->key)), (size_t *)(&(hint_key->key_size)) );
-    if (err != TIC_OK)
-    {
-        ESP_LOGE (TAG, "Valeur de la clé PSK non configurée");
-        return err;
-    }
-    log_mqtt_cfg (cfg);
-    return TIC_OK;
-}
 
 
 tic_error_t mqtt_client_restart()
