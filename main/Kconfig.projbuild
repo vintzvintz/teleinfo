@@ -59,6 +59,10 @@ menu "Teleinfo Configuration"
         help
             Adresse I2C hexadecimale (0x3C ou 0x3D)
 
+    config TIC_CONSOLE
+        bool "Enable serial console interface"
+        default y
+
     config TIC_SNTP
         bool "Enable sntp time synchronisation"
         default y
