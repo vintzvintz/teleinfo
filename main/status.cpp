@@ -1,5 +1,6 @@
 
 #include <string.h>
+#include <time.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -10,8 +11,9 @@
 
 #include "esp_netif.h"      // pour les IP_EVENT
 #include "esp_log.h"
+#include "esp_wifi.h"
 
-
+// from Kconfig
 #ifdef CONFIG_TIC_CONSOLE
 
 
@@ -21,25 +23,21 @@
 #include "status.h"
 
 static const char *TAG = "status.cpp";
-/*
-const char *LABEL_UART = "UART";
-const char *LABEL_TIC  = " TIC";
-const char *LABEL_WIFI  = "Wifi";
-const char *LABEL_IP_ADDR  = "  IP";
-const char *LABEL_MQTT_STATUS  = "MQTT";
-const char *LABEL_CLOCK = "Time";
-const char *LABEL_PAPP  = "PAPP";
-const char *LABEL_MESSAGE  = "MSG:";
-*/
 
-//static const char *STATUS_TIC_TXT_NOSIGNAL   = "no signal";
-static const char *STATUS_TIC_TXT_HISTORIQUE = "historique";
-static const char *STATUS_TIC_TXT_STANDARD   = "standard";
-static const char *STATUS_TIC_TXT_INCONNU = "inconnu";
-//static const char *STATUS_CONNECTING = "connecting...";
-//static const char *STATUS_CONNECTED  = "connected";
-//static const char *STATUS_ERROR = "error";
+static const char *FMT_UART            = "UART rx_rate=%d tic_signal=%d\n";
+static const char *FMT_UART_NOSIGNAL   = "UART rx_rate=%d no signal\n";
+static const char *FMT_TICMODE         = "TIC  mode %s\n";
+static const char *FMT_MQTT            = "MQTT %s\n";
+static const char *FMT_WIFI            = "WIFI ssid '%s' chan %d rssi %d\n";
+static const char *FMT_WIFI_NOCNX      = "WIFI not connected\n";
+static const char *FMT_WIFI_ERROR      = "WIFI error\n";
+static const char *FMT_IP_INFO         = "IP   addr %s mask %s gw %s\n";
+static const char *FMT_TIME            = "TIME %s  (sntp server %s)\n";
 
+
+static const char *STATUS_HISTORIQUE = "historique";
+static const char *STATUS_STANDARD   = "standard";
+static const char *STATUS_INCONNU = "inconnu";
 
 
 class TicStatus
@@ -50,43 +48,45 @@ private:
     tic_mode_t m_mode;
     int m_baudrate;      // 0:inconnu;   1200:historique;   9600:standard
     char *m_mqtt_status;
+    esp_netif_ip_info_t m_ip_info;
 
     // protection des acces aux variables membres
     portMUX_TYPE m_spinlock;
     tic_mode_t get_tic_mode();
     void set_tic_mode( tic_mode_t mode );
+
     int get_baudrate();
     void set_baudrate (int rate);
+
     tic_error_t get_mqtt_status( char *buf, size_t len );
     tic_error_t set_mqtt_status (const char *status);
 
+    void set_ip_info( const esp_netif_ip_info_t *ip_info );
+    void get_ip_info( esp_netif_ip_info_t *ip_info );
+
     // handlers enregistrés sur les event loops ESP - ne peuvent pas être des fonctions membre
-//    static void static_ip_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data );
+    static void static_ip_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data );
     static void static_status_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data );
 
     // reception des evènements entrants
-    //void ip_event_handler( esp_event_base_t event_base, int32_t event_id, void *event_data );
+    void ip_event_handler( esp_event_base_t event_base, int32_t event_id, void *event_data );
     void status_event_handler( esp_event_base_t event_base, int32_t event_id, void *event_data );
-    void event_baudrate (int baudrate);
-    void event_tic_data (const tic_data_t *data);
-    void event_mqtt (const char* status);
 
-
-    // printers pour chaque element du status
+    // printers pour chaque element de statut
+    void print_time();
     void print_tic_mode();
     void print_uart();
     void print_mqtt();
-
+    void print_wifi();
+    void print_ip_addr();
 
 public: 
     explicit TicStatus( );
     ~TicStatus();
     tic_error_t setup();
-
-    //void update_all();
-
     void print_status();
 };
+
 
 static TicStatus *s_tic_status = NULL;
 
@@ -96,7 +96,9 @@ TicStatus::TicStatus() :
     , m_baudrate(0)               // 0:inconnu;   1200:historique;   9600:standard
     , m_mqtt_status(NULL)
     , m_spinlock()
-{}
+{
+    set_ip_info(NULL);
+}
 
 TicStatus::~TicStatus( )
 {
@@ -113,9 +115,9 @@ tic_error_t TicStatus::setup()
     tic_error_t err = tic_register_event_handler( ESP_EVENT_ANY_ID, &static_status_event_handler, this );
 
     // handler pour les IP_EVENT sur l'eventloop par défaut du système
-    //esp_err_t err2 = esp_event_handler_instance_register( IP_EVENT, ESP_EVENT_ANY_ID, &static_ip_event_handler, this, NULL );
+    esp_err_t err2 = esp_event_handler_instance_register( IP_EVENT, ESP_EVENT_ANY_ID, &static_ip_event_handler, this, NULL );
 
-    if ( err != TIC_OK ) // || err2 != ESP_OK )
+    if ( (err != TIC_OK)  || (err2 != ESP_OK) )
     {
         ESP_LOGE( TAG, "tic_register_event_handler() erreur %d", err );
         return TIC_ERR_APP_INIT;   // message loggué par status_register_event_handler()
@@ -169,9 +171,8 @@ tic_error_t TicStatus::get_mqtt_status( char *buf, size_t len )
 
 tic_error_t TicStatus::set_mqtt_status (const char *status)
 {
-    
-    size_t len = strlen (status);
-    char *new_buf = (char *)calloc (1, len);
+    size_t len = strlen (status)+1;
+    char *new_buf = (char *)calloc ( 1, len );
     if (!new_buf)
     {
         ESP_LOGE ( TAG, "calloc() failed" );
@@ -179,7 +180,7 @@ tic_error_t TicStatus::set_mqtt_status (const char *status)
     }
     strncpy ( new_buf, status, len );
 
-    taskENTER_CRITICAL ( &m_spinlock );   
+    taskENTER_CRITICAL ( &m_spinlock );
     char *old_buf = m_mqtt_status;
     m_mqtt_status = new_buf;
     taskEXIT_CRITICAL ( &m_spinlock );
@@ -192,64 +193,81 @@ tic_error_t TicStatus::set_mqtt_status (const char *status)
 }
 
 
-
-void TicStatus::event_baudrate (int baudrate)
+void TicStatus::set_ip_info( const esp_netif_ip_info_t *ip_info )
 {
-    ESP_LOGD( TAG, "STATUS_EVENT_BAUDRATE baudrate=%d", baudrate);
-    set_baudrate ( baudrate );
+    taskENTER_CRITICAL( &m_spinlock );
+    if( ip_info == NULL )
+    {
+        memset( &m_ip_info, 0, sizeof(m_ip_info) );
+    }
+    else
+    {
+        memcpy( &m_ip_info, ip_info, sizeof(m_ip_info) );
+    }
+    taskEXIT_CRITICAL( &m_spinlock );
 }
 
-void TicStatus::event_tic_data (const tic_data_t *data )
-{
-    ESP_LOGD( TAG, "STATUS_EVENT_TIC_MODE mode=%#02x", data->mode);
-    set_tic_mode ( data->mode );
-}
 
-void TicStatus::event_mqtt( const char* status )
+
+void TicStatus::get_ip_info( esp_netif_ip_info_t *ip_info )
 {
-    ESP_LOGD( TAG, "STATUS_EVENT_MQTT %s", status);
-    set_mqtt_status ( status );
+    assert( ip_info != NULL );
+
+    taskENTER_CRITICAL( &m_spinlock );
+    memcpy( ip_info, &m_ip_info, sizeof(*ip_info) );
+    taskEXIT_CRITICAL( &m_spinlock );
 }
 
 
 void TicStatus::status_event_handler( esp_event_base_t event_base, int32_t event_id, void *event_data )
 {
     assert ( event_base==STATUS_EVENTS);
+
+    int baudrate = 0;
+    const char *status = NULL;
+    tic_data_t *data = NULL;
+
     switch( event_id )
     {
         case STATUS_EVENT_BAUDRATE:
-            event_baudrate (*(int*)event_data);
+            baudrate = *(int*)event_data;
+            //ESP_LOGD( TAG, "STATUS_EVENT_BAUDRATE baudrate=%d", baudrate);
+            set_baudrate ( baudrate );
             break;
         case STATUS_EVENT_TIC_DATA:
-            event_tic_data ( (tic_data_t *)event_data );
+            data = (tic_data_t *)event_data;
+            //ESP_LOGD( TAG, "STATUS_EVENT_TIC_MODE mode=%#x", data->mode);
+            set_tic_mode ( data->mode );
             break;
-/*        case STATUS_EVENT_CLOCK_TICK:
-            event_clock_tick ((const char *)event_data);
-            break;
-        case STATUS_EVENT_PUISSANCE :
-            event_puissance (*(int *)event_data);
-            break;
-        case STATUS_EVENT_WIFI:
-            event_wifi ((const char *)event_data);
-            break;
-        */
         case STATUS_EVENT_MQTT:
-            event_mqtt ((const char *)event_data);
+            status = (const char *)event_data;
+            //ESP_LOGD( TAG, "STATUS_EVENT_MQTT %s", status);
+            set_mqtt_status ( status );
             break;
-        default:
-            ESP_LOGW( TAG, "STATUS_EVENT id %" PRIi32 " inconnu", event_id);
+        //default:
+            //ESP_LOGD( TAG, "STATUS_EVENT id %" PRIi32, event_id);
     }
 }
 
-/*
-// fonction statique appelée par les event loop
-void TicDisplay::static_ip_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data )
+
+void TicStatus::ip_event_handler( esp_event_base_t event_base, int32_t event_id, void *event_data )
 {
-    // handler_arg doit être un pointeur vers TicDisplay
-    TicDisplay *display = (TicDisplay *)arg;
-    display->ip_event_handler (event_base, event_id, event_data);
+    assert ( event_base==IP_EVENT );
+
+    ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
+
+    switch( event_id ) 
+    {
+    case IP_EVENT_STA_GOT_IP:               // !< station got IP from connected AP 
+        set_ip_info( &(event->ip_info) );
+        break;
+    case IP_EVENT_STA_LOST_IP:              // !< station lost IP and the IP is reset to 0
+        set_ip_info( NULL );
+        break;
+    default:
+        ESP_LOGD( TAG, "IP_EVENT id=%#lx", event_id );
+    }
 }
-*/
 
 
 // fonction statique appelée par les event loop
@@ -261,24 +279,36 @@ void TicStatus::static_status_event_handler(void *arg, esp_event_base_t event_ba
 }
 
 
-static const char *FMT_UART            = "UART rx_rate=%d tic_signal=%d\n";
-static const char *FMT_UART_NOSIGNAL   = "UART rx_rate=%d no signal\n";
-static const char *FMT_TICMODE         = "TIC  mode %s\n";
-static const char *FMT_MQTT            = "MQTT %s\n";
-//static const char *FMT_TICMODE = 
-//static const char *FMT_TICMODE = 
+
+// fonction statique appelée par les event loop
+void TicStatus::static_ip_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data )
+{
+    // handler_arg doit être un pointeur vers TicDisplay
+    TicStatus *ts = (TicStatus *)arg;
+    ts->ip_event_handler (event_base, event_id, event_data);
+}
+
+
+void TicStatus::print_time()
+{
+#ifdef CONFIG_TIC_SNTP
+    time_t now = time(NULL);
+    struct tm timeinfo;
+    char buf[60];
+    localtime_r( &now, &timeinfo );
+    strftime( buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &timeinfo );
+    printf( FMT_TIME, buf, CONFIG_TIC_SNTP_SERVER );
+#endif // CONFIG_TIC_SNTP
+}
 
 void TicStatus::print_uart()
 {
 //    ESP_LOGD( TAG, "TicStatus::print_uart()" );
     int rx = uart_get_rx_baudrate();       // baudrate configuré sur l'UART
     int signal = get_baudrate();           // 0 si pas de signal
-    if( signal > 0 )
-    {
+    if( signal > 0 )  {
         printf( FMT_UART, rx, signal );
-    }
-    else
-    {
+    } else {
         printf( FMT_UART_NOSIGNAL, rx );
     }
 }
@@ -286,20 +316,20 @@ void TicStatus::print_uart()
 void TicStatus::print_tic_mode()
 {
 //    ESP_LOGD( TAG, "TicStatus::print_tic_mode()" );
-    int mode = get_tic_mode();
-    switch ( mode )
+    const char *txt;
+    switch ( get_tic_mode() )
     {
         case TIC_MODE_HISTORIQUE:
-            printf( FMT_TICMODE, STATUS_TIC_TXT_HISTORIQUE );
+            txt = STATUS_HISTORIQUE;
             break;
         case TIC_MODE_STANDARD:
-            printf( FMT_TICMODE, STATUS_TIC_TXT_STANDARD );
+            txt = STATUS_STANDARD;
             break;
         default:
-            printf( FMT_TICMODE, STATUS_TIC_TXT_INCONNU );
+            txt = STATUS_INCONNU;
     }
+    printf( FMT_TICMODE, txt );
 }
-
 
 void TicStatus::print_mqtt()
 {
@@ -309,12 +339,52 @@ void TicStatus::print_mqtt()
     printf ( FMT_MQTT, mqtt );
 }
 
+void TicStatus::print_wifi()
+{
+    wifi_ap_record_t ap_info;
+    //const char *txt;
+
+    esp_err_t err = esp_wifi_sta_get_ap_info ( &ap_info );
+    if( err == ESP_OK )
+    {
+        printf ( FMT_WIFI, ap_info.ssid, ap_info.primary, ap_info.rssi );
+    }
+    else if ( err == ESP_ERR_WIFI_NOT_CONNECT )
+    {
+        printf ( FMT_WIFI_NOCNX );
+    }
+    else  //if ( err == ESP_ERR_WIFI_CONN )
+    {
+        printf ( FMT_WIFI_ERROR );
+    }
+}
+
+
+void TicStatus::print_ip_addr()
+{
+    char ip[32];
+    char gw[32];
+    char netmask[32];
+
+    esp_netif_ip_info_t ip_info;
+    get_ip_info( &ip_info );
+
+    snprintf( ip, sizeof(ip), IPSTR, IP2STR( &(ip_info.ip) )) ;
+    snprintf( gw, sizeof(gw), IPSTR, IP2STR( &(ip_info.gw) )) ;
+    snprintf( netmask, sizeof(netmask), IPSTR, IP2STR( &(ip_info.netmask) )) ;
+    
+    printf( FMT_IP_INFO,  ip, gw, netmask);
+}
+
 
 void TicStatus::print_status()
 {
 //    ESP_LOGD( TAG, "TicStatus::print_status()" );
+    print_time();
     print_uart();
     print_tic_mode();
+    print_wifi();
+    print_ip_addr();
     print_mqtt();
 }
 

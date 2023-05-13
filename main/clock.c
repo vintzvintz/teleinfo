@@ -57,6 +57,9 @@ void sntp_callback( struct timeval *tv )
     }
 }
 
+
+
+// TODO -> déplacer dans oled.cpp  ?
 void clock_task( void *pvParams )
 {
     time_t now;
