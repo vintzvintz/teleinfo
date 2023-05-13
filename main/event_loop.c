@@ -13,7 +13,6 @@
 #include "esp_wifi.h"
 
 #include "tic_types.h"
-#include "tic_config.h"
 #include "event_loop.h"
 
 

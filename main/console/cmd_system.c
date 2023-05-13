@@ -22,9 +22,10 @@
 #include "argtable3/argtable3.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-//#include "cmd_system.h"
 
-#include "sdkconfig.h"
+#ifdef CONFIG_TIC_CONSOLE
+
+
 
 #ifdef CONFIG_FREERTOS_USE_STATS_FORMATTING_FUNCTIONS
 #define WITH_TASKS_INFO 1
@@ -479,3 +480,6 @@ static void register_log_level(void)
     };
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
 }
+
+
+#endif // CONFIG_TIC_CONSOLE

@@ -186,14 +186,14 @@ static tic_error_t decode_dataset_end( tic_decoder_t *td ) {
     {
         ESP_LOGE( TAG, "Checksum incorrect pour %s. attendu=%#x calculé=%#x  (s1=%#lx)", buf_etiquette, buf_checksum[0], checksum, s1 );
         //tic_decoder_debug_state( td );
-        return TIC_ERR_CHECKSUM;
+        return TIC_ERR_BAD_DATA;
     }
 
     // alloue un nouveau dataset et copie les données 
     dataset_t *ds = dataset_alloc();
     if (ds == NULL)
     {
-        return TIC_ERR_MEMORY;
+        return TIC_ERR_OUT_OF_MEMORY;
     }
     strncpy( ds->etiquette, buf_etiquette, TIC_SIZE_ETIQUETTE );
     strncpy( ds->valeur, buf_valeur, TIC_SIZE_VALUE );

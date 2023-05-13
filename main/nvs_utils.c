@@ -135,7 +135,7 @@ static tic_error_t get_blob_or_string( nvs_get_func_t *f, nvs_handle_t nvs, cons
         if( !out_buf )
         {
             ESP_LOGE( TAG, "malloc() failed");
-            return TIC_ERR_MEMORY;
+            return TIC_ERR_OUT_OF_MEMORY;
         }
         
         if ( (err = f(nvs, key, *out_buf, &len)) == ESP_OK) {
@@ -201,7 +201,7 @@ tic_error_t console_nvs_get_blob_as_string( const char* key, char **out_buf )
     if( !(*out_buf) )
     {
         ESP_LOGE( TAG, "malloc() failed");
-        err = TIC_ERR_MEMORY;
+        err = TIC_ERR_OUT_OF_MEMORY;
     }
     else
     {

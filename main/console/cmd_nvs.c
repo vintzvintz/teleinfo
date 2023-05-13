@@ -4,6 +4,7 @@
 // source = https://github.com/espressif/esp-idf/tree/master/examples/system/console/advanced
 
 
+
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
@@ -18,8 +19,9 @@
 #include "tic_console.h"
 #include "nvs.h"
 
-#include "nvs_utils.h"
+#ifdef CONFIG_TIC_CONSOLE
 
+#include "nvs_utils.h"
 
 static const char *ARG_TYPE_STR = "type can be: i8, u8, i16, u16 i32, u32 i64, u64, str, blob";
 static const char *DEFAULT_PARTITION="nvs";
@@ -342,3 +344,6 @@ void console_register_nvs(void)
     ESP_ERROR_CHECK(esp_console_cmd_register(&list_entries_cmd));
     ESP_ERROR_CHECK(esp_console_cmd_register(&erase_namespace_cmd));
 }
+
+
+#endif // CONFIG_TIC_CONSOLE

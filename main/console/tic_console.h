@@ -1,4 +1,6 @@
 
+#ifdef CONFIG_TIC_CONSOLE
+
 #include "tic_types.h"
 
 
@@ -26,3 +28,6 @@ void console_register_system(void);
 
 // Register deep and light sleep functions
 //void register_system_sleep(void);
+
+
+#endif   // CONFIG_TIC_CONSOLE

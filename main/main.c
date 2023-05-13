@@ -21,9 +21,16 @@
   #include "clock.h"
 #endif
 
+
+
 #include "event_loop.h"
 #include "ticled.h"
-#include "tic_console.h"
+
+#ifdef CONFIG_TIC_CONSOLE
+  #include "tic_console.h"
+  #include "status.h"
+#endif
+
 
 
 #define TZSTRING_CET         "CET-1CEST,M3.5.0/2,M10.5.0/3"    // [Europe/Paris]
@@ -47,19 +54,19 @@ void app_main(void)
 {
     esp_log_level_set("*", ESP_LOG_INFO);
 
-//    esp_log_level_set("cmd_tic.c", ESP_LOG_INFO);
+    esp_log_level_set("cmd_tic.c", ESP_LOG_DEBUG);
 //    esp_log_level_set("wifi.c", ESP_LOG_WARN);
  //   esp_log_level_set("process.c",ESP_LOG_INFO);
  //   esp_log_level_set("mqtt.c",ESP_LOG_DEBUG);
  //   esp_log_level_set("wifi", ESP_LOG_WARN);
  //   esp_log_level_set("wifi_init", ESP_LOG_WARN);
  //   esp_log_level_set("uart_events.c", ESP_LOG_DEBUG);
-    esp_log_level_set("event_loop.c", ESP_LOG_DEBUG);
- //   esp_log_level_set("status.c", ESP_LOG_DEBUG);
-    esp_log_level_set("decode.c", ESP_LOG_WARN);
+  //  esp_log_level_set("event_loop.c", ESP_LOG_DEBUG);
+    esp_log_level_set("status.cpp", ESP_LOG_DEBUG);
+ //   esp_log_level_set("decode.c", ESP_LOG_WARN);
   //  esp_log_level_set("ticled.c", ESP_LOG_DEBUG);
     //esp_log_level_set("dataset.c", ESP_LOG_DEBUG);
-    //esp_log_level_set("process.c", ESP_LOG_DEBUG);
+//    esp_log_level_set("process.c", ESP_LOG_DEBUG);
     //esp_log_level_set("puissance.c", ESP_LOG_DEBUG);
   //  esp_log_level_set("oled.cpp", ESP_LOG_DEBUG);
 
@@ -78,10 +85,18 @@ void app_main(void)
     nvs_initialise();
    
     wifi_task_start();
-    console_task_start();
 
+
+#ifdef CONFIG_TIC_CONSOLE
+    status_init();
+    console_task_start();
+#endif
+
+#ifdef CONFIG_TIC_SNTP
+    clock_task_start();
     setenv( "TZ", TZSTRING_CET, 1);
     tzset();
+#endif
 
 //    start_bouton_task();
 
@@ -95,8 +110,8 @@ void app_main(void)
     process_task_start();
     mqtt_task_start( 0 );   // 0=lance le client mqtt   1=dummy/debug
 
-#ifdef CONFIG_TIC_SNTP
-    clock_task_start();
-#endif
+
+
+
 }
 

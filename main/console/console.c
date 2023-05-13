@@ -33,6 +33,9 @@
 //#include "cmd_nvs.h"
 
 
+#ifdef CONFIG_TIC_CONSOLE
+
+
 #include "tic_console.h"
 
 
@@ -218,3 +221,5 @@ tic_error_t console_task_start()
     }
     return TIC_OK;
 }
+
+#endif     // CONFIG_TIC_CONSOLE
