@@ -77,7 +77,7 @@ static bool toggle_baudrate()
 }
 
 
-static int get_baudrate()
+int uart_get_rx_baudrate()
 {
     uint32_t baudrate = 0;
     esp_err_t err = uart_get_baudrate(UART_TELEINFO_NUM, &baudrate);   // ignore error
@@ -92,7 +92,7 @@ static int get_baudrate()
 
 static int get_tic_mode()
 {
-    int baudrate = get_baudrate();
+    int baudrate = uart_get_rx_baudrate();
     if (baudrate == BAUD_RATE_MODE_STANDARD)
     {
         return TIC_MODE_STANDARD;
@@ -104,7 +104,7 @@ static int get_tic_mode()
     return TIC_MODE_INCONNU;
 }
 
-static void uart_detect_baudrate_task(void *pvParameters)
+static void baudrate_detection_task(void *pvParameters)
 {
     s_toggle_event = xEventGroupCreate();
     if( !s_toggle_event)
@@ -132,7 +132,7 @@ static void uart_detect_baudrate_task(void *pvParameters)
         /*bits = */xEventGroupWaitBits (s_toggle_event, (BIT_TOGGLE_REQUEST | BIT_TOGGLE_ENABLE), pdTRUE, pdTRUE, portMAX_DELAY);
         ESP_LOGD (TAG, "detect_task: TOGGLE_REQ et TOGGLE_EN were set");
 
-        cur_baudrate = get_baudrate();
+        cur_baudrate = uart_get_rx_baudrate();
 
         switch (cur_baudrate)
         {
@@ -188,7 +188,7 @@ static void uart_rcv_task(void *pvParameters)
         }
 
         // baudrate avec plancher à 1200 pour éviter une division par 0
-        baudrate = get_baudrate();
+        baudrate = uart_get_rx_baudrate();
         baudrate = (baudrate > 0) ? baudrate : BAUD_RATE_MODE_HISTORIQUE;
 
         // nb de Ticks pour recevoir TIC_UART_THRESOLD bytes (8 bits + stop + parity )
@@ -235,7 +235,7 @@ static void uart_rcv_task(void *pvParameters)
                 else
                 {   
                     // met a jour le statut s'il n'y a plus d'erreurs
-                    send_event_baudrate ( get_baudrate() );
+                    send_event_baudrate ( uart_get_rx_baudrate() );
                 }
                 break;
             //Event of HW FIFO overflow detected
@@ -324,7 +324,7 @@ tic_error_t uart_task_start( )
     }
 
     if(    (xTaskCreate(uart_rcv_task, "uart_rcv_task", 4096, NULL, 12, NULL) != pdTRUE) 
-        || (xTaskCreate(uart_detect_baudrate_task, "uart_detect_baudrate_task", 4096, NULL, 2, NULL) != pdTRUE ) )
+        || (xTaskCreate(baudrate_detection_task, "baudrate_detection_task", 4096, NULL, 2, NULL) != pdTRUE ) )
     {
         ESP_LOGE( TAG, "xTaskCreate() failed" );
         return TIC_ERR_APP_INIT;

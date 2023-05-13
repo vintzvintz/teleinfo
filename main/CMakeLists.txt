@@ -18,6 +18,7 @@ set(srcs
     "wifi.c"
 #    "bouton.c"
     "nvs_utils.c"
+    "status.cpp"
     "console/console.c"
     "console/cmd_nvs.c" 
     "console/cmd_tic.c"

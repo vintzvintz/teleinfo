@@ -12,12 +12,15 @@
 #include "esp_err.h"
 #include "nvs.h"
 
+
+#ifdef CONFIG_TIC_CONSOLE
+
 #include "tic_config.h"
 #include "tic_console.h"
 #include "nvs_utils.h"
 #include "wifi.h"       // pour forcer une reconnexion wifi
 #include "mqtt.h"       // pour forcer une reconnexion mqtt
-
+#include "status.h"     // pour print_status()
 
 static const char *TAG = "cmd_tic.c";
 
@@ -161,6 +164,8 @@ static int mqtt_psk_set(int argc, char **argv)
 
 static int show_params(int argc, char**argv)
 {
+    ESP_LOGD( TAG, "show_params()" );
+
     char missing[] = "<aucun>";
     char *ssid     = NULL;
     char *password = NULL;
@@ -193,6 +198,12 @@ static int show_params(int argc, char**argv)
     if (psk != missing) free(psk);
     
     return 0;
+}
+
+static int show_status(int argc, char**argv)
+{
+    tic_error_t err = status_print();
+    return err;
 }
 
 
@@ -262,21 +273,35 @@ static void register_mqtt_psk_set(void)
 
 static void register_show_params(void)
 {
-    const esp_console_cmd_t status_cmd = {
+    const esp_console_cmd_t params_cmd = {
         .command = "show_params",
-        .help = "Voir les parametres définis en NVS\n",
+        .help = "Affiche les parametres définis en NVS\n",
         .hint = NULL,
         .func = &show_params,
     };
-    ESP_ERROR_CHECK(esp_console_cmd_register(&status_cmd));
+    ESP_ERROR_CHECK ( esp_console_cmd_register(&params_cmd) );
 }
 
+static void register_show_status(void)
+{
+    const esp_console_cmd_t status_cmd = {
+        .command = "show_status",
+        .help = "Affiche l'etat des connexions du système\n",
+        .hint = NULL,
+        .func = &show_status,
+    };
+    ESP_ERROR_CHECK ( esp_console_cmd_register(&status_cmd) );
+}
 
 void console_register_commands(void)
 {
     register_show_params();
+    register_show_status();
     register_wifi_set();
     register_wifi_scan();
     register_mqtt_broker_set();
     register_mqtt_psk_set();
 }
+
+
+#endif   // CONFIG_TIC_CONSOLE
