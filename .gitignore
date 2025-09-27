@@ -5,4 +5,4 @@ teleinfo.code-workspace
 compile_commands.json
 /managed_components
 *.lock
-
+/.cache
