@@ -32,7 +32,7 @@ TimerHandle_t s_clock_wdt = NULL;
 #define MAX_MISSED_RESYNC    5
 
 
-void clock_lost()
+void clock_lost(TimerHandle_t xTimer)
 {
     ESP_LOGW( TAG, "SNTP sync is lost" );
     send_event_sntp( 0 );
@@ -58,7 +58,7 @@ void sntp_callback( struct timeval *tv )
     }
 }
 
-void clock_tick_callback( )
+void clock_tick_callback(TimerHandle_t xTimer)
 {
   send_event_clock_tick();  // ignore errors
 }
@@ -69,10 +69,10 @@ tic_error_t sntp_client_initialise()
     ESP_LOGD( TAG, "clock_task_start()");
 
     // initialize SNTP client
-    sntp_setoperatingmode(SNTP_OPMODE_POLL);
-    sntp_setservername(0, CLOCK_SERVER_NAME );
-    sntp_set_time_sync_notification_cb( sntp_callback );
-    sntp_init();
+    esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    esp_sntp_setservername(0, CLOCK_SERVER_NAME );
+    esp_sntp_set_time_sync_notification_cb( sntp_callback );
+    esp_sntp_init();
 
     // timer will expire after too much missed resync
     uint32_t clock_lost_delay = sntp_get_sync_interval() * MAX_MISSED_RESYNC ;

@@ -279,7 +279,7 @@ tic_error_t process_receive_datasets( dataset_t *ds )
 }
 
 
-tic_error_t process_task_start( QueueHandle_t to_decoder, QueueHandle_t to_mqtt )
+tic_error_t process_task_start( )
 {
     puissance_init();
 
